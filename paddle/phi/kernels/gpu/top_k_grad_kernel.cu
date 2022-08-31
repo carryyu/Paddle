@@ -26,9 +26,9 @@ namespace ops = paddle::operators;
 template <typename T, typename Context>
 void TopkGradKernel(const Context& dev_ctx,
                     const DenseTensor& x,
+                    const DenseTensor& k_list,
                     const DenseTensor& indices,
                     const DenseTensor& out_grad,
-                    const Scalar& k_scalar,
                     int axis,
                     bool largest,
                     bool sorted,
@@ -36,7 +36,20 @@ void TopkGradKernel(const Context& dev_ctx,
   const auto& in_dims = x.dims();
   const auto& out_dims = indices.dims();
 
-  int k = k_scalar.to<int>();
+  DenseTensor k_largest_tensor;
+  phi::DDim k_largest_dim = phi::make_ddim({1});
+  k_largest_tensor.Resize(k_largest_dim);
+  dev_ctx.template Alloc<int>(&k_largest_tensor);
+  int* k_largest_data = k_largest_tensor.data<int>();
+
+  ops::getMaxK<int, 256><<<1, 256, 0, dev_ctx.stream()>>>(
+      k_list.data<int>(), k_largest_data, k_list.numel());
+  // VLOG(0) << "k_largest_data:" << k_largest_tensor;
+  DenseTensor k_largest_host;
+  phi::CPUPlace cpu;
+  phi::Copy(dev_ctx, k_largest_tensor, cpu, false, &k_largest_host);
+  int k_largest = k_largest_host.data<int>()[0];
+  // VLOG(0) << "k_largest_data:" << k_largest_host;
 
   // get the real the axis and the k
   if (axis < 0) {
@@ -65,15 +78,29 @@ void TopkGradKernel(const Context& dev_ctx,
     else
       return 64;
   };
-  int block_size = ComputeBlockSize(post * k);
+  int block_size = ComputeBlockSize(post * k_largest);
   int max_threads = dev_ctx.GetMaxPhysicalThreadCount();
   const int max_blocks = std::max(((max_threads - 1) / block_size + 1), 1);
   int grid_size = std::min(max_blocks, pre);
-
+  int bs_size = 1;
+  if (in_dims.size() > 1) {
+    bs_size = in_dims[0];
+  }
+  int bs_offset = pre / bs_size;
   // lanuch the cuda kernel to assign the grad
   ops::AssignGradWithAxis<T>
       <<<grid_size, block_size, 64 * 4, dev_ctx.stream()>>>(
-          out_grad_data, indices_data, x_grad_data, pre, post, n, k);
+          out_grad_data,
+          indices_data,
+          x_grad_data,
+          pre,
+          post,
+          n,
+          k_largest,
+          bs_offset,
+          k_list.numel() > 1 ? k_list.data<int>() : nullptr);
+  // cudaDeviceSynchronize();
+  // VLOG(0) << "x_grad_data: " << *x_grad;
 }
 
 }  // namespace phi

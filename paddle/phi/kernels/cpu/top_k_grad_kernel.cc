@@ -52,16 +52,17 @@ static void FullTopKAssign(const Type& input_height,
 template <typename T, typename Context>
 void TopkGradKernel(const Context& dev_ctx,
                     const DenseTensor& x,
+                    const DenseTensor& k_list,
                     const DenseTensor& indices,
                     const DenseTensor& out_grad,
-                    const Scalar& k_scalar,
                     int axis,
                     bool largest,
                     bool sorted,
                     DenseTensor* x_grad) {
   const auto& in_dims = x.dims();
   const auto& out_dims = indices.dims();
-  int k = k_scalar.to<int>();
+  const auto* k_list_data = k_list.data<int>();
+  int k = k_list_data[0];
   // axis < 0, get the real axis
   axis = (axis < 0) ? (in_dims.size() + axis) : axis;
 

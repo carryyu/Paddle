@@ -877,6 +877,8 @@ def topk(x, k, axis=None, largest=True, sorted=True, name=None):
     if in_dygraph_mode():
         if axis == None:
             axis = -1
+        if not isinstance(k, Variable):
+            k = paddle.to_tensor(k, dtype="int32")
         out, indices = _C_ops.top_k(x, k, axis, largest, sorted)
         return out, indices
 

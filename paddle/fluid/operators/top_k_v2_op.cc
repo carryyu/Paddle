@@ -44,8 +44,8 @@ class TopkV2OpMaker : public framework::OpProtoAndCheckerMaker {
     AddInput("X", "(Tensor) The input of Topk op");
     AddInput("K",
              "(Tensor)  Number of top elements to look for along "
-             "the last dimension (along each row for matrices).")
-        .AsDispensable();
+             "the last dimension (along each row for matrices).");
+    // .AsDispensable();
     AddOutput("Out", "(Tensor) The output tensor of Topk op");
     AddOutput("Indices", "(Tensor) The indices of Topk elements of input");
     AddComment(R"DOC(
@@ -56,10 +56,10 @@ entries in the vector and outputs their values and indices as vectors.
 Thus values[j] is the j-th largest entry in input, and its index is indices[j].
 
 For matrices, this operator computes the top k entries in each row. )DOC");
-    AddAttr<int>("k",
-                 "(int, default 1) Number of top elements to look for along "
-                 "the tensor).")
-        .SetDefault(1);
+    // AddAttr<int>("k",
+    //              "(int, default 1) Number of top elements to look for along "
+    //              "the tensor).")
+    //     .SetDefault(1);
     AddAttr<int>("axis",
                  "the axis to sort and get the k indices, value."
                  "if not set, will get k value in last axis.")
@@ -81,6 +81,10 @@ class TopkV2OpGrad : public framework::OperatorWithKernel {
         ctx->HasInput("X"),
         true,
         platform::errors::InvalidArgument("Input(X) should be not null"));
+    PADDLE_ENFORCE_EQ(
+        ctx->HasInput("K"),
+        true,
+        platform::errors::InvalidArgument("Input(K) should be not null"));
     PADDLE_ENFORCE_EQ(
         ctx->HasInput("Indices"),
         true,
@@ -117,6 +121,7 @@ class TopkV2GradOpMaker : public framework::SingleGradOpMaker<T> {
     op->SetType("top_k_v2_grad");
     op->SetInput(framework::GradVarName("Out"), this->OutputGrad("Out"));
     op->SetInput("X", this->Input("X"));
+    op->SetInput("K", this->Input("K"));
     op->SetInput("Indices", this->Output("Indices"));
     op->SetOutput(framework::GradVarName("X"), this->InputGrad("X"));
     op->SetAttrMap(this->Attrs());

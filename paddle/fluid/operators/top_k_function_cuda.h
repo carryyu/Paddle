@@ -27,8 +27,11 @@ limitations under the License. */
 #include "paddle/fluid/operators/kernel_primitives/functor_primitives.h"
 #include "paddle/fluid/operators/top_k_op.h"
 #include "paddle/fluid/platform/device/gpu/gpu_device_function.h"
+#include "paddle/fluid/platform/device/gpu/gpu_launch_config.h"
 #include "paddle/fluid/platform/device/gpu/gpu_primitives.h"
 #include "paddle/fluid/platform/float16.h"
+
+#define FINAL_MASK 0xffffffff
 
 #ifdef __HIPCC__
 namespace rocprim {
@@ -351,9 +354,11 @@ __global__ void KeMatrixTopK(T* output,
                              const T* src,
                              int lds,
                              int dim,
-                             int k,
+                             int k_largest,
                              int grid_dim,
                              int num,
+                             const int* ks,
+                             int bs_offset,
                              bool largest = true) {
   __shared__ Pair<T> sh_topk[BlockSize];
   const int tid = threadIdx.x;
@@ -361,10 +366,14 @@ __global__ void KeMatrixTopK(T* output,
 
   const int bid = blockIdx.x;
   for (int i = bid; i < num; i += grid_dim) {
+    int k = k_largest;
+    if (ks) {
+      k = ks[i / bs_offset];
+    }
     int top_num = k;
     __shared__ int maxid[BlockSize / 2];
     T* out = output + i * output_stride;
-    int64_t* inds = indices + i * k;
+    int64_t* inds = indices + i * k_largest;
     Pair<T> topk[MaxLength];
     int beam = MaxLength;
     Pair<T> max;
@@ -402,6 +411,44 @@ __global__ void KeMatrixTopK(T* output,
                                            warp,
                                            largest);
     }
+  }
+}
+
+template <typename T>
+__forceinline__ __device__ T WarpReduceMax(T input) {
+#pragma unroll
+  for (int offset = 16; offset > 0; offset >>= 1) {
+    input =
+        max(input, platform::CudaShuffleDownSync(FINAL_MASK, input, offset));
+  }
+  return input;
+}
+
+template <typename T, int BlockSize>
+__global__ void getMaxK(const T* k_list, T* max_k, int64_t size) {
+  __shared__ T shared_max[BlockSize / 32];
+  int64_t tid = threadIdx.x;
+  int64_t wid = tid / 32;
+  int64_t lane = tid % 32;
+  T max_value = -1;
+  for (int64_t i = tid; i < size; i += blockDim.x * gridDim.x) {
+    if (*(k_list + i) > max_value) {
+      max_value = *(k_list + i);
+    }
+  }
+  __syncthreads();
+  max_value = WarpReduceMax<T>(max_value);
+  if (lane == 0) {
+    shared_max[wid] = max_value;
+  }
+  __syncthreads();
+  max_value = (tid < BlockSize / 32) ? shared_max[lane] : -1;
+  if (wid == 0) {
+    max_value = WarpReduceMax<T>(max_value);
+  }
+  __syncthreads();
+  if (tid == 0) {
+    *max_k = max_value;
   }
 }
 
@@ -884,9 +931,15 @@ __global__ void AssignGradWithAxis(const T* grad_out,
                                    int pre,
                                    int post,
                                    int raw_height,
-                                   int k) {
+                                   int k_largest,
+                                   int bs_offset,
+                                   const int* ks) {
   // raw_height is the length of topk axis
   for (int i = blockIdx.x; i < pre; i += gridDim.x) {
+    int k = k_largest;
+    if (ks) {
+      k = ks[i / bs_offset];
+    }
     int base_index = i * post * k;
     int base_grad = i * post * raw_height;
     for (int j = threadIdx.x; j < raw_height * post; j += blockDim.x) {

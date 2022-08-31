@@ -54,8 +54,15 @@ void KthvalueGradKernel(const Context& dev_ctx,
   const int max_blocks = std::max(((max_threads - 1) / block_size + 1), 1);
   int grid_size = std::min(max_blocks, pre);
   paddle::operators::AssignGradWithAxis<T>
-      <<<grid_size, block_size, 64 * 4, dev_ctx.stream()>>>(
-          out_grad_data, indices_data, x_grad_data, pre, post, n, 1);
+      <<<grid_size, block_size, 64 * 4, dev_ctx.stream()>>>(out_grad_data,
+                                                            indices_data,
+                                                            x_grad_data,
+                                                            pre,
+                                                            post,
+                                                            n,
+                                                            1,
+                                                            1,
+                                                            nullptr);
 }
 
 }  // namespace phi
