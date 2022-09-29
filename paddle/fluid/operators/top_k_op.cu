@@ -175,6 +175,8 @@ class TopkOpGradCUDAKernel : public framework::OpKernel<T> {
 };
 #undef FIXED_BLOCK_DIM_BASE
 #undef FIXED_BLOCK_DIM
+#undef FIXED_MAXLENGTH_BASE
+#undef FIXED_MAXLENGTH
 
 }  // namespace operators
 }  // namespace paddle

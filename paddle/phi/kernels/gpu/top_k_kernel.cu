@@ -332,6 +332,8 @@ void TopkKernel(const Context& dev_ctx,
 }
 #undef FIXED_BLOCK_DIM_BASE
 #undef FIXED_BLOCK_DIM
+#undef FIXED_MAXLENGTH_BASE
+#undef FIXED_MAXLENGTH
 
 }  // namespace phi
 
