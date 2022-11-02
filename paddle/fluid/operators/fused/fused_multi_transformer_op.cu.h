@@ -1155,6 +1155,119 @@ void write_cache_kv(const phi::GPUContext &dev_ctx,
       cache_v, v, num_head, dim_head, seq_len, max_seq_len);
 }
 
+template<typename T, int VecSize>
+__global__ void add_fusedQKV_bias_transpose_kernel(T* q_buf,
+                                                    T* k_buf,
+                                                    T* v_buf,
+                                                    const T* __restrict QKV,
+                                                    const T* __restrict qkv_bias,
+                                                    const int* padding_offset,
+                                                    const int32_t elem_cnt, 
+                                                    const int32_t batch_size,
+                                                    const int32_t seq_len,
+                                                    const int32_t token_num,
+                                                    const int32_t head_num,
+                                                    const int32_t size_per_head)
+{   
+    T* qkv_ptr[3] = {q_buf, k_buf, v_buf};
+    const int hidden_size = head_num * size_per_head;
+    const int fused_hidden_size = 3 * hidden_size; 
+    int64_t global_thread_idx = blockDim.x * blockIdx.x + threadIdx.x; 
+    using LoadT = phi::AlignedVector<T, VecSize>;
+    LoadT src_vec; 
+    LoadT bias_vec; 
+
+    for (int32_t linear_index = global_thread_idx * VecSize, step = gridDim.x * blockDim.x * VecSize; linear_index < elem_cnt;
+         linear_index += step) {
+        phi::Load<T, VecSize>(&QKV[linear_index], &src_vec); 
+        int32_t bias_idx = linear_index % fused_hidden_size; 
+        phi::Load<T, VecSize>(&qkv_bias[bias_idx], &bias_vec);
+        
+        #pragma unroll
+        for(int32_t unroll_idx = 0; unroll_idx < VecSize; unroll_idx++){
+            src_vec[unroll_idx] += bias_vec[unroll_idx]; 
+        }
+
+        const int token_idx        = linear_index / fused_hidden_size;
+        const int token_padded_idx = token_idx + (padding_offset == nullptr ? 0 : padding_offset[token_idx]);
+        const int target_batch_id  = token_padded_idx / seq_len;
+        const int seq_id           = token_padded_idx % seq_len;
+
+        // maybe can optimize here. Done
+        // const int qkv_id  = (linear_index % fused_hidden_size) / hidden_size;
+        const int qkv_id  = bias_idx / hidden_size;
+        const int head_id = (linear_index % hidden_size) / size_per_head;
+        const int size_id = linear_index % size_per_head;
+
+        phi::Store<T, VecSize>(src_vec, &qkv_ptr[qkv_id][target_batch_id * head_num * seq_len * size_per_head + head_id * seq_len * size_per_head + seq_id * size_per_head + size_id]); 
+    
+    }
+}
+
+
+constexpr int kBlockSize = 128;
+constexpr int kNumWaves = 16;
+
+inline cudaError_t GetNumBlocks(int64_t n, int* num_blocks) {
+  int dev;
+  {
+    cudaError_t err = cudaGetDevice(&dev);
+    if (err != cudaSuccess) { return err; }
+  }
+  int sm_count;
+  {
+    cudaError_t err = cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount, dev);
+    if (err != cudaSuccess) { return err; }
+  }
+  int max_thread_per_multiprocessor;
+  {
+    cudaError_t err = cudaDeviceGetAttribute(&max_thread_per_multiprocessor, cudaDevAttrMaxThreadsPerMultiProcessor, dev);
+    if (err != cudaSuccess) { return err; }
+  }
+  *num_blocks = std::max<int>(1, std::min<int64_t>((n + kBlockSize - 1) / kBlockSize,
+                                                   sm_count * max_thread_per_multiprocessor / kBlockSize * kNumWaves));
+  return cudaSuccess;
+}
+
+template <typename T>
+void qkv_bias_add_transpose(const phi::GPUContext &dev_ctx,
+                            T* q_buf,
+                            T* k_buf,
+                            T* v_buf,
+                            const T* qkv,
+                            const T* qkv_bias,
+                            const int  batch_size,
+                            const int  head_num,
+                            const int  seq_len,
+                            const int  size_per_head) {
+  const int32_t token_num = batch_size * seq_len; 
+  const int32_t elem_cnt = token_num * head_num * size_per_head * 3; 
+  constexpr int PackSize = VEC_16B / sizeof(T);
+  PADDLE_ENFORCE_EQ(
+      size_per_head % PackSize,
+      0,
+      platform::errors::PreconditionNotMet(
+          "dim_head=%d must be divisible by vec_size=%d", size_per_head, PackSize));
+  const int32_t pack_num = elem_cnt / PackSize; 
+  const int32_t blocksize = 128; 
+  int32_t grid_size = 1;
+  GetNumBlocks(pack_num, &grid_size); 
+  add_fusedQKV_bias_transpose_kernel<T, PackSize><<<grid_size, blocksize, 0, dev_ctx.stream()>>>(q_buf,
+                                                                                                  k_buf,
+                                                                                                  v_buf,
+                                                                                                  qkv,
+                                                                                                  qkv_bias,
+                                                                                                  nullptr, /*padding_offset*/
+                                                                                                  elem_cnt, 
+                                                                                                  batch_size,
+                                                                                                  seq_len,
+                                                                                                  token_num,
+                                                                                                  head_num,
+                                                                                                  size_per_head);
+                                                                                                                
+}
+
+
 }  // namespace
 
 }  // namespace operators
