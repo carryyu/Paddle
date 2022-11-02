@@ -260,20 +260,19 @@ class FMHARef {
 
 
   void ComputeForwardv2(const phi::DenseTensor& qkv_input_tensor,
-                      const phi::DenseTensor* cache_kv_tensor,
-                      const phi::DenseTensor* src_mask_tensor,
-                      // phi::DenseTensor* transpose_2_out_tensor,
-                      phi::DenseTensor* q_transpose_out_tensor,
-                      phi::DenseTensor* k_transpose_out_tensor,
-                      phi::DenseTensor* v_transpose_out_tensor,
-                      phi::DenseTensor* cache_kv_out_tensor,
-                      phi::DenseTensor* qk_out_tensor,
-                      phi::DenseTensor* src_mask_out_tensor,
-                      phi::DenseTensor* softmax_out_tensor,
-                      phi::DenseTensor* dropout_mask_out_tensor,
-                      phi::DenseTensor* dropout_out_tensor,
-                      phi::DenseTensor* qktv_out_tensor,
-                      phi::DenseTensor* fmha_out_tensor) {
+                        const phi::DenseTensor* cache_kv_tensor,
+                        const phi::DenseTensor* src_mask_tensor,
+                        // phi::DenseTensor* transpose_2_out_tensor,
+                        phi::DenseTensor* q_transpose_out_tensor,
+                        const phi::DenseTensor* kv_transpose_out_tensor,
+                        phi::DenseTensor* cache_kv_out_tensor,
+                        phi::DenseTensor* qk_out_tensor,
+                        phi::DenseTensor* src_mask_out_tensor,
+                        phi::DenseTensor* softmax_out_tensor,
+                        phi::DenseTensor* dropout_mask_out_tensor,
+                        phi::DenseTensor* dropout_out_tensor,
+                        phi::DenseTensor* qktv_out_tensor,
+                        phi::DenseTensor* fmha_out_tensor) {
     // input shape: [bs, seq_len, 3, num_head, head_dim]
     // transpose with perm [2, 0, 3, 1, 4],
     // output_shape: [3, bs, num_head, seq_len, head_dim]
@@ -288,29 +287,28 @@ class FMHARef {
     T* fmha_out_data = fmha_out_tensor->data<T>();
 
     auto out_seq_len = seq_len_;
-    // if (cache_kv_tensor) {
-    //   // kv [2, bs, num_head, seq_len, head_dim]
-    //   auto kv_tensor = transpose_2_out_tensor->Slice(1, 3);
-    //   phi::funcs::ConcatFunctor<phi::GPUContext, T> concat;
-    //   // out [2, bs, num_head, cache_seq_len + seq_len, head_dim]
-    //   concat(dev_ctx_, {*cache_kv_tensor, kv_tensor}, 3, cache_kv_out_tensor);
-    //   out_seq_len = cache_kv_out_tensor->dims()[3];
-    // }
+    if (cache_kv_tensor) {
+      // kv [2, bs, num_head, seq_len, head_dim]
+      phi::funcs::ConcatFunctor<phi::GPUContext, T> concat;
+      // out [2, bs, num_head, cache_seq_len + seq_len, head_dim]
+      concat(dev_ctx_, {*cache_kv_tensor, *kv_transpose_out_tensor}, 3, cache_kv_out_tensor);
+      out_seq_len = cache_kv_out_tensor->dims()[3];
+    }
 
-    // int64_t q_size = batch_size_ * seq_len_ * num_head_ * head_dim_;
-    // T* q_ptr = qkv_data;
-    // T* k_ptr = nullptr;
-    // T* v_ptr = nullptr;
+    int64_t q_size = batch_size_ * seq_len_ * num_head_ * head_dim_;
+    T* q_ptr = q_transpose_out_tensor->data<T>();
+    const T* k_ptr = nullptr;
+    const T* v_ptr = nullptr;
 
-    // if (cache_kv_tensor) {
-    //   int64_t k_size = cache_kv_out_tensor->numel() / 2;
-    //   k_ptr = cache_kv_out_tensor->data<T>();
-    //   v_ptr = k_ptr + k_size;
-    // } else {
-    //   int64_t k_size = q_size;
-    //   k_ptr = q_ptr + q_size;
-    //   v_ptr = k_ptr + k_size;
-    // }
+    if (cache_kv_tensor) {
+      int64_t k_size = cache_kv_out_tensor->numel() / 2;
+      k_ptr = cache_kv_out_tensor->data<T>();
+      v_ptr = k_ptr + k_size;
+    } else {
+      int64_t k_size = q_size;
+      k_ptr = kv_transpose_out_tensor->data<T>();
+      v_ptr = k_ptr + k_size;
+    }
 
     // {
     //   // NOTE(wangxi): We scale Q with 1/sqrt(Dh) before QK^T, because for
@@ -324,9 +322,8 @@ class FMHARef {
     // }
 
 
-    T* q_ptr = q_transpose_out_tensor->data<T>();
-    T* k_ptr = k_transpose_out_tensor->data<T>();
-    T* v_ptr = v_transpose_out_tensor->data<T>();
+    // T* q_ptr = q_transpose_out_tensor->data<T>();
+    // T* kv_ptr = kv_transpose_out_tensor->data<T>();
 
     {
       // NOTE(wangxi): We scale Q with 1/sqrt(Dh) before QK^T, because for

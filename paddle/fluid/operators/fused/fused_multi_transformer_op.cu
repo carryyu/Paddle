@@ -124,13 +124,11 @@ class FusedMultiTransformerOpKernel : public framework::OpKernel<T> {
     // auto *transpose_out_2_data =
     //     dev_ctx.Alloc<T>(&transpose_out_2, transpose_out_2.numel() * sizeof(T));
 
-    Tensor q_transpose_out, k_transpose_out, v_transpose_out; 
+    Tensor q_transpose_out, kv_transpose_out; 
     q_transpose_out.Resize({bsz, num_head, seq_len, dim_head}); 
     auto *q_transpose_out_data = dev_ctx.Alloc<T>(&q_transpose_out, q_transpose_out.numel() * sizeof(T));
-    k_transpose_out.Resize({bsz, num_head, seq_len, dim_head}); 
-    auto *k_transpose_out_data = dev_ctx.Alloc<T>(&k_transpose_out, k_transpose_out.numel() * sizeof(T));
-    v_transpose_out.Resize({bsz, num_head, seq_len, dim_head}); 
-    auto *v_transpose_out_data = dev_ctx.Alloc<T>(&v_transpose_out, v_transpose_out.numel() * sizeof(T));
+    kv_transpose_out.Resize({2, bsz, num_head, seq_len, dim_head}); 
+    auto *kv_transpose_out_data = dev_ctx.Alloc<T>(&kv_transpose_out, kv_transpose_out.numel() * sizeof(T));
 
     Tensor qk_out;
     qk_out.Resize({{bsz, num_head, seq_len, out_seq_len}});
@@ -321,8 +319,7 @@ class FusedMultiTransformerOpKernel : public framework::OpKernel<T> {
       } else if (cache_kv_out) {  // generation context stage
         qkv_bias_add_transpose<T>(dev_ctx, 
                                   q_transpose_out_data, 
-                                  k_transpose_out_data, 
-                                  v_transpose_out_data, 
+                                  kv_transpose_out_data, 
                                   qkv_out_data, 
                                   qkv_bias->data<T>(), 
                                   bsz, 
@@ -352,10 +349,8 @@ class FusedMultiTransformerOpKernel : public framework::OpKernel<T> {
         fmha_compute.ComputeForwardv2(qkv_out,
                                     pre_cache_kv_tensor,
                                     src_mask,
-                                    // &transpose_out_2,
                                     &q_transpose_out, 
-                                    &k_transpose_out, 
-                                    &v_transpose_out, 
+                                    &kv_transpose_out, 
                                     pre_cache_kv_out_tmp,
                                     &qk_out,
                                     src_mask_tmp,
@@ -383,8 +378,9 @@ class FusedMultiTransformerOpKernel : public framework::OpKernel<T> {
           // k_ptr = q_ptr + q_size;
           // v_ptr = k_ptr + k_size;
 
-          k_ptr = k_transpose_out_data;
-          v_ptr = v_transpose_out_data; 
+          int64_t k_size = bsz * seq_len * num_head * dim_head;
+          k_ptr = kv_transpose_out_data;
+          v_ptr = kv_transpose_out_data + k_size; 
         }
 
         // [2, bsz, num_head, max_seq_len, head_dim]
@@ -421,13 +417,11 @@ class FusedMultiTransformerOpKernel : public framework::OpKernel<T> {
         //                             &qktv_out,
         //                             &fmha_out);
 
-
         fmha_compute.ComputeForwardv2(qkv_out,
                                     cache_kv,
                                     src_mask,
                                     &q_transpose_out, 
-                                    &k_transpose_out, 
-                                    &v_transpose_out,
+                                    &kv_transpose_out, 
                                     cache_kv_out,
                                     &qk_out,
                                     nullptr,

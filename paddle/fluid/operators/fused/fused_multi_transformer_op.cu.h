@@ -1157,21 +1157,20 @@ void write_cache_kv(const phi::GPUContext &dev_ctx,
 
 template<typename T, int VecSize>
 __global__ void add_fusedQKV_bias_transpose_kernel(T* q_buf,
-                                                    T* k_buf,
-                                                    T* v_buf,
-                                                    const T* __restrict QKV,
-                                                    const T* __restrict qkv_bias,
-                                                    const int* padding_offset,
-                                                    const int32_t elem_cnt, 
-                                                    const int32_t batch_size,
-                                                    const int32_t seq_len,
-                                                    const int32_t token_num,
-                                                    const int32_t head_num,
-                                                    const int32_t size_per_head)
+                                                   T* kv_buf,
+                                                   const T* __restrict QKV,
+                                                   const T* __restrict qkv_bias,
+                                                   const int* padding_offset,
+                                                   const int32_t elem_cnt, 
+                                                   const int  batch_size,
+                                                   const int  seq_len,
+                                                   const int  token_num,
+                                                   const int  head_num,
+                                                   const int  size_per_head)
 {   
-    T* qkv_ptr[3] = {q_buf, k_buf, v_buf};
-    const int hidden_size = head_num * size_per_head;
-    const int fused_hidden_size = 3 * hidden_size; 
+    const int32_t offset = batch_size * seq_len * head_num * size_per_head; 
+    const int32_t hidden_size = head_num * size_per_head;
+    const int32_t fused_hidden_size = 3 * hidden_size; 
     int64_t global_thread_idx = blockDim.x * blockIdx.x + threadIdx.x; 
     using LoadT = phi::AlignedVector<T, VecSize>;
     LoadT src_vec; 
@@ -1188,19 +1187,23 @@ __global__ void add_fusedQKV_bias_transpose_kernel(T* q_buf,
             src_vec[unroll_idx] += bias_vec[unroll_idx]; 
         }
 
-        const int token_idx        = linear_index / fused_hidden_size;
-        const int token_padded_idx = token_idx + (padding_offset == nullptr ? 0 : padding_offset[token_idx]);
-        const int target_batch_id  = token_padded_idx / seq_len;
-        const int seq_id           = token_padded_idx % seq_len;
+        const int32_t token_idx = linear_index / fused_hidden_size;
+        const int32_t token_padded_idx = token_idx + (padding_offset == nullptr ? 0 : padding_offset[token_idx]);
+        const int32_t target_batch_id = token_padded_idx / seq_len;
+        const int32_t seq_id = token_padded_idx % seq_len;
 
         // maybe can optimize here. Done
         // const int qkv_id  = (linear_index % fused_hidden_size) / hidden_size;
-        const int qkv_id  = bias_idx / hidden_size;
-        const int head_id = (linear_index % hidden_size) / size_per_head;
-        const int size_id = linear_index % size_per_head;
+        const int32_t qkv_id = bias_idx / hidden_size;
+        const int32_t head_id = (linear_index % hidden_size) / size_per_head;
+        const int32_t size_id = linear_index % size_per_head;
 
-        phi::Store<T, VecSize>(src_vec, &qkv_ptr[qkv_id][target_batch_id * head_num * seq_len * size_per_head + head_id * seq_len * size_per_head + seq_id * size_per_head + size_id]); 
-    
+        if(qkv_id == 0){
+          phi::Store<T, VecSize>(src_vec, &q_buf[target_batch_id * head_num * seq_len * size_per_head + head_id * seq_len * size_per_head + seq_id * size_per_head + size_id]); 
+        } else {
+          const int32_t kv_store_offset = (qkv_id - 1) * offset; 
+          phi::Store<T, VecSize>(src_vec, &kv_buf[kv_store_offset + target_batch_id * head_num * seq_len * size_per_head + head_id * seq_len * size_per_head + seq_id * size_per_head + size_id]); 
+        }
     }
 }
 
@@ -1232,8 +1235,7 @@ inline cudaError_t GetNumBlocks(int64_t n, int* num_blocks) {
 template <typename T>
 void qkv_bias_add_transpose(const phi::GPUContext &dev_ctx,
                             T* q_buf,
-                            T* k_buf,
-                            T* v_buf,
+                            T* kv_buf,
                             const T* qkv,
                             const T* qkv_bias,
                             const int  batch_size,
@@ -1253,8 +1255,7 @@ void qkv_bias_add_transpose(const phi::GPUContext &dev_ctx,
   int32_t grid_size = 1;
   GetNumBlocks(pack_num, &grid_size); 
   add_fusedQKV_bias_transpose_kernel<T, PackSize><<<grid_size, blocksize, 0, dev_ctx.stream()>>>(q_buf,
-                                                                                                  k_buf,
-                                                                                                  v_buf,
+                                                                                                  kv_buf,
                                                                                                   qkv,
                                                                                                   qkv_bias,
                                                                                                   nullptr, /*padding_offset*/
