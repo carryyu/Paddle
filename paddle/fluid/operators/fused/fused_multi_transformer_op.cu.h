@@ -1155,7 +1155,7 @@ void write_cache_kv(const phi::GPUContext &dev_ctx,
       cache_v, v, num_head, dim_head, seq_len, max_seq_len);
 }
 
-template<typename T, int VecSize>
+template<typename T, int VecSize, bool ComputeBias>
 __global__ void add_fusedQKV_bias_transpose_kernel(T* q_buf,
                                                    T* kv_buf,
                                                    const T* __restrict QKV,
@@ -1180,13 +1180,13 @@ __global__ void add_fusedQKV_bias_transpose_kernel(T* q_buf,
          linear_index += step) {
         phi::Load<T, VecSize>(&QKV[linear_index], &src_vec); 
         int32_t bias_idx = linear_index % fused_hidden_size; 
-        phi::Load<T, VecSize>(&qkv_bias[bias_idx], &bias_vec);
-        
-        #pragma unroll
-        for(int32_t unroll_idx = 0; unroll_idx < VecSize; unroll_idx++){
-            src_vec[unroll_idx] += bias_vec[unroll_idx]; 
+        if(ComputeBias){
+          phi::Load<T, VecSize>(&qkv_bias[bias_idx], &bias_vec);
+          #pragma unroll
+          for(int32_t unroll_idx = 0; unroll_idx < VecSize; unroll_idx++){
+              src_vec[unroll_idx] += bias_vec[unroll_idx]; 
+          }
         }
-
         const int32_t token_idx = linear_index / fused_hidden_size;
         const int32_t token_padded_idx = token_idx + (padding_offset == nullptr ? 0 : padding_offset[token_idx]);
         const int32_t target_batch_id = token_padded_idx / seq_len;
@@ -1206,7 +1206,6 @@ __global__ void add_fusedQKV_bias_transpose_kernel(T* q_buf,
         }
     }
 }
-
 
 constexpr int kBlockSize = 128;
 constexpr int kNumWaves = 16;
@@ -1238,10 +1237,11 @@ void qkv_bias_add_transpose(const phi::GPUContext &dev_ctx,
                             T* kv_buf,
                             const T* qkv,
                             const T* qkv_bias,
-                            const int  batch_size,
-                            const int  head_num,
-                            const int  seq_len,
-                            const int  size_per_head) {
+                            const int batch_size,
+                            const int head_num,
+                            const int seq_len,
+                            const int size_per_head, 
+                            bool compute_bias) {
   const int32_t token_num = batch_size * seq_len; 
   const int32_t elem_cnt = token_num * head_num * size_per_head * 3; 
   constexpr int PackSize = VEC_16B / sizeof(T);
@@ -1254,7 +1254,8 @@ void qkv_bias_add_transpose(const phi::GPUContext &dev_ctx,
   const int32_t blocksize = 128; 
   int32_t grid_size = 1;
   GetNumBlocks(pack_num, &grid_size); 
-  add_fusedQKV_bias_transpose_kernel<T, PackSize><<<grid_size, blocksize, 0, dev_ctx.stream()>>>(q_buf,
+  if(compute_bias){
+    add_fusedQKV_bias_transpose_kernel<T, PackSize, true><<<grid_size, blocksize, 0, dev_ctx.stream()>>>(q_buf,
                                                                                                   kv_buf,
                                                                                                   qkv,
                                                                                                   qkv_bias,
@@ -1265,9 +1266,22 @@ void qkv_bias_add_transpose(const phi::GPUContext &dev_ctx,
                                                                                                   token_num,
                                                                                                   head_num,
                                                                                                   size_per_head);
+  } else {
+    add_fusedQKV_bias_transpose_kernel<T, PackSize, false><<<grid_size, blocksize, 0, dev_ctx.stream()>>>(q_buf,
+                                                                                                  kv_buf,
+                                                                                                  qkv,
+                                                                                                  qkv_bias,
+                                                                                                  nullptr, /*padding_offset*/
+                                                                                                  elem_cnt, 
+                                                                                                  batch_size,
+                                                                                                  seq_len,
+                                                                                                  token_num,
+                                                                                                  head_num,
+                                                                                                  size_per_head);
+  }
+  
                                                                                                                 
 }
-
 
 }  // namespace
 

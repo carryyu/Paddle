@@ -258,13 +258,11 @@ class FMHARef {
         dev_ctx_, *qktv_out_tensor, perm_3, fmha_out_tensor);
   }
 
-
-  void ComputeForwardv2(const phi::DenseTensor& qkv_input_tensor,
+  void ComputeForwardV2(const phi::DenseTensor& qkv_input_tensor,
                         const phi::DenseTensor* cache_kv_tensor,
                         const phi::DenseTensor* src_mask_tensor,
-                        // phi::DenseTensor* transpose_2_out_tensor,
-                        phi::DenseTensor* q_transpose_out_tensor,
-                        const phi::DenseTensor* kv_transpose_out_tensor,
+                        phi::DenseTensor* q_transpose_out_tensor, 
+                        phi::DenseTensor* kv_transpose_out_tensor, 
                         phi::DenseTensor* cache_kv_out_tensor,
                         phi::DenseTensor* qk_out_tensor,
                         phi::DenseTensor* src_mask_out_tensor,
@@ -276,10 +274,6 @@ class FMHARef {
     // input shape: [bs, seq_len, 3, num_head, head_dim]
     // transpose with perm [2, 0, 3, 1, 4],
     // output_shape: [3, bs, num_head, seq_len, head_dim]
-    // std::vector<int> perm_1 = {2, 0, 3, 1, 4};
-    // TransposeGPUKernelDriver<T>(
-    //     dev_ctx_, qkv_input_tensor, perm_1, transpose_2_out_tensor);
-    // T* qkv_data = transpose_2_out_tensor->data<T>();
     T* qk_out_data = qk_out_tensor->data<T>();
     T* qktv_out_data = qktv_out_tensor->data<T>();
     T* softmax_out_data = softmax_out_tensor->data<T>();
@@ -297,8 +291,8 @@ class FMHARef {
 
     int64_t q_size = batch_size_ * seq_len_ * num_head_ * head_dim_;
     T* q_ptr = q_transpose_out_tensor->data<T>();
-    const T* k_ptr = nullptr;
-    const T* v_ptr = nullptr;
+    T* k_ptr = nullptr;
+    T* v_ptr = nullptr;
 
     if (cache_kv_tensor) {
       int64_t k_size = cache_kv_out_tensor->numel() / 2;
@@ -310,29 +304,13 @@ class FMHARef {
       v_ptr = k_ptr + k_size;
     }
 
-    // {
-    //   // NOTE(wangxi): We scale Q with 1/sqrt(Dh) before QK^T, because for
-    //   // float16 calculation, INF may appear in QK^T if we do not scale before.
-    //   float alpha = 1.0 / sqrt(head_dim_);
-    //   auto q_tensor = transpose_2_out_tensor->Slice(0, 1);
-    //   auto functor = phi::funcs::ScaleFunctor<T>(alpha);
-    //   std::vector<const phi::DenseTensor*> ins = {&q_tensor};
-    //   std::vector<phi::DenseTensor*> outs = {&q_tensor};
-    //   phi::funcs::ElementwiseKernel<T>(dev_ctx_, ins, &outs, functor);
-    // }
-
-
-    // T* q_ptr = q_transpose_out_tensor->data<T>();
-    // T* kv_ptr = kv_transpose_out_tensor->data<T>();
-
     {
       // NOTE(wangxi): We scale Q with 1/sqrt(Dh) before QK^T, because for
       // float16 calculation, INF may appear in QK^T if we do not scale before.
       float alpha = 1.0 / sqrt(head_dim_);
-      auto q_tensor = q_transpose_out_tensor;
       auto functor = phi::funcs::ScaleFunctor<T>(alpha);
-      std::vector<const phi::DenseTensor*> ins = {q_tensor};
-      std::vector<phi::DenseTensor*> outs = {q_tensor};
+      std::vector<const phi::DenseTensor*> ins = {q_transpose_out_tensor};
+      std::vector<phi::DenseTensor*> outs = {q_transpose_out_tensor};
       phi::funcs::ElementwiseKernel<T>(dev_ctx_, ins, &outs, functor);
     }
 
