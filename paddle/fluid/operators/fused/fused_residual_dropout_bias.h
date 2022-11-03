@@ -178,7 +178,9 @@ __global__ void FusedResidualDropoutBias(
   int row_id = blockIdx.y;
   int idx = row_id * cols + col_id;
   curandStatePhilox4_32_10_t state;
-  curand_init(seed, idx, increment, &state);
+  if (dropout_prob != 0) {
+    curand_init(seed, idx, increment, &state);
+  }
   const T factor = GetFactor<T>(dropout_prob, is_upscale_in_train, is_test);
   phi::funcs::ReluFunctor<T> relu;
   for (int r = row_id; r < rows; r += blockDim.y * gridDim.y) {

@@ -133,7 +133,10 @@ __global__ void FusedLayernormResidualDropoutBias(
   int row_id = blockIdx.x;
   int idx = row_id * cols + col_id;
   curandStatePhilox4_32_10_t state;
-  curand_init(seed, idx, increment, &state);
+  // curand_init(seed, idx, increment, &state);
+  if (dropout_prob != 0) {
+    curand_init(seed, idx, increment, &state);
+  }
 
   T factor = GetFactor<T>(dropout_prob, is_upscale_in_train, is_test);
 
@@ -237,7 +240,9 @@ __global__ void FusedLayernormResidualDropoutBiasInfer(
   int row_id = blockIdx.x;
   int idx = row_id * cols + col_id;
   curandStatePhilox4_32_10_t state;
-  curand_init(seed, idx, increment, &state);
+  if (dropout_prob != 0) {
+    curand_init(seed, idx, increment, &state);
+  }
 
   T factor = GetFactor<T>(dropout_prob, is_upscale_in_train, is_test);
 
@@ -467,7 +472,10 @@ __global__ __launch_bounds__(THREADS_PER_CTA) void fused_fast_ln_fwd_kernel(
 
   int idx = r * ELTS_PER_ROW + c;
   curandStatePhilox4_32_10_t state;
-  curand_init(seed, idx, increment, &state);
+  // curand_init(seed, idx, increment, &state);
+  if (dropout_prob != 0) {
+    curand_init(seed, idx, increment, &state);
+  }
 
   T factor = GetFactor<T>(dropout_prob, is_upscale_in_train, is_test);
 

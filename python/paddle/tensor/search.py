@@ -953,6 +953,25 @@ def topk(x, k, axis=None, largest=True, sorted=True, name=None):
     return values, indices
 
 
+def top_p_sampling(x, ps, max_dec_len, name=None):
+    if in_dygraph_mode():
+        return _C_ops.top_p_sampling(x, ps, max_dec_len)
+
+    inputs = {"x": [x], "ps": [ps]}
+    attrs = {}
+    attrs['max_dec_len'] = max_dec_len
+
+    helper = LayerHelper('top_p_sampling', **locals())
+    out = helper.create_variable_for_type_inference(dtype="int64")
+    helper.append_op(
+        type='top_p_sampling',
+        inputs=inputs,
+        outputs={'out': [out]},
+        attrs=attrs,
+    )
+    return out
+
+
 def bucketize(x, sorted_sequence, out_int32=False, right=False, name=None):
     """
     This API is used to find the index of the corresponding 1D tensor `sorted_sequence` in the innermost dimension based on the given `x`.

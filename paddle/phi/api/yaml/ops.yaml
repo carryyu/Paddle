@@ -336,6 +336,14 @@
     func : tan
   backward : tan_grad
 
+- op : top_p_sampling
+  args : (Tensor x, Tensor ps, int max_dec_len=1)
+  output : Tensor (out)
+  infer_meta :
+    func : TopPSamplingInferMeta
+  kernel :
+    func : top_p_sampling
+
 - op : trace
   args : (Tensor x, int offset = 0, int axis1 = 0, int axis2 = 1)
   output : Tensor
