@@ -177,6 +177,8 @@ class FusedMultiTransformerOpOpMaker
     AddInput("TimeStep",
              "(optional, int) The time step for generation inference.")
         .AsDispensable();
+    AddInput("SeqLengths", "(optional) The sequence length tensor of inputs.")
+        .AsDispensable();
     AddInput("SrcMask", "(optional) The attention mask tensor in fmha.")
         .AsDispensable();
     AddInput("OutLinearW", "The out_linear weight tensor.").AsDuplicable();
@@ -209,6 +211,10 @@ class FusedMultiTransformerOpOpMaker
                   "else, uses post_layer_norm architecuture. "
                   "[default true].")
         .SetDefault(true);
+    AddAttr<bool>("remove_padding",
+                  "if true, replace padding in computing. "
+                  "[default false].")
+        .SetDefault(false);
     AddAttr<float>("epsilon",
                    "Constant for numerical stability [default 1e-5].")
         .SetDefault(1e-5)

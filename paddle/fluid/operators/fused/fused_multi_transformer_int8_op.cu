@@ -349,6 +349,7 @@ class FusedMultiTransformerINT8OpKernel : public framework::OpKernel<T> {
                 qkv_out,
                 *qkv_bias,
                 *src_mask,
+                nullptr,
                 cache_kv_out,
                 &fmha_out,
                 bsz,
