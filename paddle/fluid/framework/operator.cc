@@ -1564,16 +1564,18 @@ void OperatorWithKernel::RunImpl(const Scope& scope,
       HasAttr(kAllKernelsMustComputeRuntimeShape))
     all_kernels_must_compute_runtime_shape_ = true;
   const Scope* cur_scope = &scope;
-  if (!enable_cache_runtime_context_) {
+  // if (!enable_cache_runtime_context_) {
+  if (true) {
     RuntimeContext ctx(Inputs(), Outputs(), scope);
     RunImpl(scope, place, &ctx);
     pre_scope_ = cur_scope;
-  } else if (run_phi_kernel_ && impl_ != nullptr && !need_prepare_data_ &&
-             !need_prepare_phi_data_) {
-    if (!all_kernels_must_compute_runtime_shape_ && impl_->NeedInferShape()) {
-      this->Info().infer_shape_(impl_->getRuntimeInferShapeContext());
-    }
-    (*phi_kernel_)(impl_->getKernelContext());
+    // } else if (run_phi_kernel_ && impl_ != nullptr && !need_prepare_data_ &&
+    //            !need_prepare_phi_data_) {
+    //   if (!all_kernels_must_compute_runtime_shape_ &&
+    //   impl_->NeedInferShape()) {
+    //     this->Info().infer_shape_(impl_->getRuntimeInferShapeContext());
+    //   }
+    //   (*phi_kernel_)(impl_->getKernelContext());
   } else {
     if (runtime_ctx_.get() == nullptr || pre_scope_ != cur_scope) {
       std::lock_guard<std::mutex> lock(cache_update_mutex_);
