@@ -61,6 +61,9 @@ from collections.abc import Iterable
 __all__ = [
     'embedding',
     'autoincreased_step_counter',
+    'beam_search',
+    'beam_search_decode',
+    'lod_reset',
 ]
 
 OP_NAMEMAPPING = {
@@ -101,6 +104,314 @@ def _get_reduce_dim(dim, input):
 
     return reduce_all, dim
 
+
+def lod_reset(x, y=None, target_lod=None):
+    """
+    Set LoD of :attr:`x` to a new one specified by :attr:`y` or
+    :attr:`target_lod`. When :attr:`y` provided, :attr:`y.lod` would be
+    considered as target LoD first, otherwise :attr:`y.data` would be
+    considered as target LoD. If :attr:`y` is not provided, target LoD should
+    be specified by :attr:`target_lod`. If target LoD is specified by
+    :attr:`y.data` or :attr:`target_lod`, only one level LoD is supported.
+    .. code-block:: text
+        * Example 1:
+            Given a 1-level LoDTensor x:
+                x.lod =  [[ 2,           3,                   1 ]]
+                x.data = [[1.0], [2.0], [3.0], [4.0], [5.0], [6.0]]
+                x.dims = [6, 1]
+            target_lod: [4, 2]
+            then we get a 1-level LoDTensor:
+                out.lod =  [[4,                          2]]
+                out.data = [[1.0], [2.0], [3.0], [4.0], [5.0], [6.0]]
+                out.dims = [6, 1]
+        * Example 2:
+            Given a 1-level LoDTensor x:
+                x.lod =  [[2,            3,                   1]]
+                x.data = [[1.0], [2.0], [3.0], [4.0], [5.0], [6.0]]
+                x.dims = [6, 1]
+            y is a Tensor:
+                y.data = [[2, 4]]
+                y.dims = [1, 3]
+            then we get a 1-level LoDTensor:
+                out.lod =  [[2,            4]]
+                out.data = [[1.0], [2.0], [3.0], [4.0], [5.0], [6.0]]
+                out.dims = [6, 1]
+        * Example 3:
+            Given a 1-level LoDTensor x:
+                x.lod =  [[2,            3,                   1]]
+                x.data = [[1.0], [2.0], [3.0], [4.0], [5.0], [6.0]]
+                x.dims = [6, 1]
+            y is a 2-level LoDTensor:
+                y.lod =  [[2, 2], [2, 2, 1, 1]]
+                y.data = [[1.1], [2.1], [3.1], [4.1], [5.1], [6.1]]
+                y.dims = [6, 1]
+            then we get a 2-level LoDTensor:
+                out.lod =  [[2, 2], [2, 2, 1, 1]]
+                out.data = [[1.0], [2.0], [3.0], [4.0], [5.0], [6.0]]
+                out.dims = [6, 1]
+    Args:
+        x (Variable): Input variable which could be a Tensor or LoDTensor.
+                      The data type should be int32, int64, float32 or float64.
+        y (Variable, optional): If provided, output's LoD would be derived from :attr:`y`.
+                                If y's lod level>0, the data type can be any type.
+                                If y's lod level=0, the data type should be int32.
+        target_lod (list|tuple, optional): One level LoD which should be considered
+                                      as target LoD when :attr:`y` not provided.
+    Returns:
+        Variable: Output variable with LoD specified by this layer.
+    Raises:
+        ValueError: If :attr:`y` and :attr:`target_lod` are both None.
+    Examples:
+        .. code-block:: python
+            import paddle.fluid as fluid
+            x = fluid.layers.data(name='x', shape=[10])
+            y = fluid.layers.data(name='y', shape=[10, 20], lod_level=2)
+            out = fluid.layers.lod_reset(x=x, y=y)
+    """
+    check_variable_and_dtype(
+        x, 'x', ['float32', 'float64', 'int32', 'int64'], 'lod_reset'
+    )
+    helper = LayerHelper("lod_reset", **locals())
+    out = helper.create_variable_for_type_inference(dtype=x.dtype)
+    if y is not None:
+        check_type(y, 'y', (Variable), 'lod_reset')
+        # TODO: check y.lod_level = 0 dtype
+        helper.append_op(
+            type="lod_reset", inputs={'X': x, 'Y': y}, outputs={'Out': out}
+        )
+    elif target_lod is not None:
+        helper.append_op(
+            type="lod_reset",
+            inputs={'X': x},
+            attrs={'target_lod': target_lod},
+            outputs={'Out': out},
+        )
+    else:
+        raise ValueError("y and target_lod should not be both none.")
+    return out
+
+
+def beam_search(
+    pre_ids,
+    pre_scores,
+    ids,
+    scores,
+    beam_size,
+    end_id,
+    level=0,
+    is_accumulated=True,
+    name=None,
+    return_parent_idx=False,
+):
+    r"""
+    Beam search is a classical algorithm for selecting candidate words in a
+    machine translation task.
+    Refer to `Beam search <https://en.wikipedia.org/wiki/Beam_search>`_
+    for more details.
+    **This operator only supports LoDTensor.** It is used after finishing
+    scores calculation to perform beam search for one time step. Specifically,
+    after ``ids`` and ``scores`` have been produced, it selects the top-K
+    ( `k` is ``beam_size`` ) candidate word ids of current step from ``ids``
+    according to the corresponding ``scores``. Additionally, ``pre_id`` and
+    ``pre_scores`` are the output of `beam_search` at previous step, they
+    are needed for special use to handle ended candidate translations.
+    Note that if ``is_accumulated`` is True, the ``scores`` passed in should
+    be accumulated scores. Otherwise, the ``scores`` are
+    considered as the probabilities of single step and would be transformed to
+    the log field and added up with ``pre_scores`` for final scores in this
+    operator. Length penalty should be done with extra operators before calculating
+    the accumulated scores if needed.
+    Please see the following demo for a fully beam search usage example:
+        fluid/tests/book/test_machine_translation.py
+    Args:
+        pre_ids(Variable): A LodTensor variable (lod level is 2), representing
+            the selected ids of previous step. It is the output of beam_search
+            at previous step. Its shape is `[batch_size, 1]` and its lod is
+            `[[0, 1, ... , batch_size], [0, 1, ..., batch_size]]` at the
+            first step. The data type should be int64.
+        pre_scores(Variable): A LodTensor variable has the same shape and lod
+            with ``pre_ids`` , representing the accumulated scores corresponding
+            to the selected ids of previous step. It is the output of
+            beam_search at previous step. The data type should be float32 or float64.
+        ids(Variable|None): A LodTensor variable containing the candidates ids.
+            It has the same lod with ``pre_ids`` and its shape should be
+            `[batch_size * beam_size, K]`, where `K` supposed to be greater than
+            ``beam_size`` and the first dimension size (decrease as samples reach
+            to the end) should be same as that of ``pre_ids`` . The data type
+            should be int64. It can be None, which use index in ``scores`` as
+            ids.
+        scores(Variable): A LodTensor variable containing the accumulated
+            scores corresponding to ``ids`` . Both its shape and lod are same as
+            those of ``ids`` . The data type should be float32 or float64.
+        beam_size(int): The beam width used in beam search.
+        end_id(int): The id of end token.
+        level(int): **It can be ignored and mustn't change currently.**
+            The 2 level lod used in this operator has the following
+            meaning: The first level describes how many beams each sample has,
+            which would change to 0 when beams of the sample all end (batch reduce);
+            The second level describes how many times each beam is selected.
+            Default 0, which shouldn't be changed currently.
+        is_accumulated(bool): Whether the input ``score`` is accumulated scores.
+            Default True.
+        name(str, optional): For detailed information, please refer
+            to :ref:`api_guide_Name`. Usually name is no need to set and
+            None by default.
+        return_parent_idx(bool, optional): Whether to return an extra Tensor variable
+            in output, which stores the selected ids' parent index in
+            ``pre_ids`` and can be used to update RNN's states by gather operator.
+            Default False.
+    Returns:
+        tuple: The tuple contains two or three LodTensor variables. The two LodTensor, \
+            representing the selected ids and the corresponding accumulated scores of \
+            current step, have the same shape `[batch_size, beam_size]` and lod with 2 levels, \
+            and have data types int64 and float32. If ``return_parent_idx`` is True, \
+            an extra Tensor variable preserving the selected ids' parent index \
+            is included, whose shape is `[batch_size * beam_size]` and data type \
+            is int64.
+    Examples:
+        .. code-block:: python
+            import paddle.fluid as fluid
+            import paddle
+            paddle.enable_static()
+            # Suppose `probs` contains predicted results from the computation
+            # cell and `pre_ids` and `pre_scores` is the output of beam_search
+            # at previous step.
+            beam_size = 4
+            end_id = 1
+            pre_ids = fluid.data(
+                name='pre_id', shape=[None, 1], lod_level=2, dtype='int64')
+            pre_scores = fluid.data(
+                name='pre_scores', shape=[None, 1], lod_level=2, dtype='float32')
+            probs = fluid.data(
+                name='probs', shape=[None, 10000], dtype='float32')
+            topk_scores, topk_indices = fluid.layers.topk(probs, k=beam_size)
+            accu_scores = fluid.layers.elementwise_add(
+                x=paddle.log(x=topk_scores),
+                y=paddle.reshape(pre_scores, shape=[-1]),
+                axis=0)
+            selected_ids, selected_scores = fluid.layers.beam_search(
+                pre_ids=pre_ids,
+                pre_scores=pre_scores,
+                ids=topk_indices,
+                scores=accu_scores,
+                beam_size=beam_size,
+                end_id=end_id)
+    """
+    check_variable_and_dtype(pre_ids, 'pre_ids', ['int64'], 'beam_search')
+    check_variable_and_dtype(
+        pre_scores, 'pre_scores', ['float32', 'float64'], 'beam_search'
+    )
+    check_type(ids, 'ids', (Variable, type(None)), 'beam_search')
+    check_variable_and_dtype(
+        scores, 'scores', ['float32', 'float64'], 'beam_search'
+    )
+    helper = LayerHelper('beam_search', **locals())
+    score_type = pre_scores.dtype
+    id_type = pre_ids.dtype
+
+    inputs = {"pre_ids": pre_ids, "pre_scores": pre_scores, "scores": scores}
+    if ids is not None:
+        inputs["ids"] = ids
+
+    selected_scores = helper.create_variable_for_type_inference(
+        dtype=score_type
+    )
+    selected_ids = helper.create_variable_for_type_inference(dtype=id_type)
+    # parent_idx is a tensor used to gather cell states at the next time
+    # step. Though lod in selected_ids can also be used to gather by
+    # sequence_expand, it is not efficient.
+    # gather_op's index input only supports int32 dtype currently
+    parent_idx = helper.create_variable_for_type_inference(dtype="int32")
+
+    helper.append_op(
+        type='beam_search',
+        inputs=inputs,
+        outputs={
+            'selected_ids': selected_ids,
+            'selected_scores': selected_scores,
+            'parent_idx': parent_idx,
+        },
+        attrs={
+            # TODO(ChunweiYan) to assure other value support
+            'level': level,
+            'beam_size': beam_size,
+            'end_id': end_id,
+            'is_accumulated': is_accumulated,
+        },
+    )
+    if return_parent_idx:
+        return selected_ids, selected_scores, parent_idx
+    else:
+        return selected_ids, selected_scores
+
+
+def beam_search_decode(ids, scores, beam_size, end_id, name=None):
+    r"""
+    This operator is used after beam search has completed. It constructs the
+    full predicted sequences for each sample by walking back along the search
+    paths stored in lod of ``ids`` . The result sequences are stored in a
+    LoDTensor, which uses the following way to parse:
+    .. code-block:: text
+        If lod = [[0, 3, 6], [0, 12, 24, 40, 54, 67, 82]]
+        The first level of lod stands for: There are 2 samples each having 3
+        (beam width) predicted sequence.
+        The second level of lod stands for: The lengths of the first sample's
+        3 predicted sequences are 12, 12, 16; The lengths of the second sample's
+        3 predicted sequences are 14, 13, 15.
+    Please see the following demo for a fully beam search usage example:
+        fluid/tests/book/test_machine_translation.py
+    Args:
+        ids(Variable): The LoDTensorArray variable containing the selected ids
+            of all steps. Each LoDTensor in it has int64 data type and 2 level
+            lod which can be used to get the search paths.
+        scores(Variable): The LodTensorArray variable containing the accumulated
+            scores corresponding to selected ids of all steps. It has the same size
+            as ``ids`` . Each LoDTensor in it has the same shape and lod as the
+            counterpart in ``ids`` , and has a float32 data type.
+        beam_size(int): The beam width used in beam search.
+        end_id(int): The id of end token.
+        name(str, optional): For detailed information, please refer
+            to :ref:`api_guide_Name`. Usually name is no need to set and
+            None by default.
+    Returns:
+        tuple: The tuple contains two LodTensor variables. The two LodTensor, \
+            containing the full sequences of ids and the corresponding accumulated \
+            scores, have the same shape flattened to 1D and have the same 2 level \
+            lod. The lod can be used to get how many predicted sequences each sample \
+            has and how many ids each predicted sequence has.
+    Examples:
+        .. code-block:: python
+            import paddle.fluid as fluid
+            import paddle
+            paddle.enable_static()
+            # Suppose `ids` and `scores` are LodTensorArray variables reserving
+            # the selected ids and scores of all steps
+            ids = fluid.layers.create_array(dtype='int64')
+            scores = fluid.layers.create_array(dtype='float32')
+            finished_ids, finished_scores = fluid.layers.beam_search_decode(
+                ids, scores, beam_size=5, end_id=0)
+    """
+    check_variable_and_dtype(ids, 'ids', ['int64'], 'beam_search_encode')
+    check_variable_and_dtype(
+        scores, 'scores', ['float32'], 'beam_search_encode'
+    )
+    helper = LayerHelper('beam_search_decode', **locals())
+    sentence_ids = helper.create_variable_for_type_inference(dtype=ids.dtype)
+    sentence_scores = helper.create_variable_for_type_inference(
+        dtype=scores.dtype
+    )
+
+    helper.append_op(
+        type="beam_search_decode",
+        inputs={"Ids": ids, "Scores": scores},
+        outputs={
+            "SentenceIds": sentence_ids,
+            "SentenceScores": sentence_scores,
+        },
+        attrs={"beam_size": beam_size, "end_id": end_id},
+    )
+
+    return sentence_ids, sentence_scores
 
 @dygraph_only
 def _elementwise_op_in_dygraph(

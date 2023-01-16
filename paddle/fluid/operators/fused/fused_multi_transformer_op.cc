@@ -63,10 +63,10 @@ class FusedMultiTransformerOp : public framework::OperatorWithKernel {
     auto x_dim = ctx->GetInputDim("X");
     auto y_dim = ctx->GetInputsDim("QKVW")[0];
     bool trans_qkvw = ctx->Attrs().Get<bool>("trans_qkvw");
-    bool remove_padding = ctx->Attrs().Get<bool>("remove_padding");
-    if (remove_padding) {
-      CHECK_INPUT(SeqLengths);
-    }
+    // bool remove_padding = ctx->Attrs().Get<bool>("remove_padding");
+    // if (remove_padding) {
+    //   CHECK_INPUT(SeqLengths);
+    // }
     PADDLE_ENFORCE_EQ(
         x_dim.size(),
         3,

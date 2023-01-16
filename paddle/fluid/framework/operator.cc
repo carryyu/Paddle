@@ -1571,7 +1571,8 @@ void OperatorWithKernel::RunImpl(const Scope& scope,
       HasAttr(kAllKernelsMustComputeRuntimeShape))
     all_kernels_must_compute_runtime_shape_ = true;
   const Scope* cur_scope = &scope;
-  if (!enable_cache_runtime_context_) {
+  // if (!enable_cache_runtime_context_) {
+  if (true) {
     RuntimeContext ctx(Inputs(), Outputs(), scope);
     RunImpl(scope, place, &ctx);
     pre_scope_ = cur_scope;

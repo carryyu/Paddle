@@ -702,6 +702,15 @@ class FusedMultiTransformerOpKernel : public framework::OpKernel<T> {
     phi::DenseTensor x_remove_padding;
     bool encoder_remove_padding = (remove_padding && !time_step);
     int token_num = 0;
+    // if (sequence_lengths) {
+    //   VLOG(0) << "vlog seq: " << *sequence_lengths;
+    // }
+
+    // if (time_step) {
+    //   VLOG(0) << "time step: " << *time_step;
+    // } else {
+    //   VLOG(0) << "time step is None";
+    // }
 
     // remove padding in encoder
     if (encoder_remove_padding) {
@@ -721,6 +730,8 @@ class FusedMultiTransformerOpKernel : public framework::OpKernel<T> {
                              bsz,
                              seq_len);
       padding_offset_tensor.Resize({{token_num}});
+      // VLOG(0) << "vlog padding_offset_tensor: " << padding_offset_tensor;
+      // VLOG(0) << "token_num: " << d_token_tensor;
       x_remove_padding.Resize({{token_num, dim_embed}});
       dev_ctx.Alloc<T>(&x_remove_padding, x_remove_padding.numel() * sizeof(T));
       InvokeRemovePadding(dev_ctx,
