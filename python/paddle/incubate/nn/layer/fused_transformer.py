@@ -1204,6 +1204,7 @@ class FusedMultiTransformer(Layer):
         nranks=1,
         trans_qkvw=True,
         remove_padding=False,
+        use_geglu=False,
         ring_id=-1,
         name=None,
     ):
@@ -1229,6 +1230,7 @@ class FusedMultiTransformer(Layer):
         self._epsilon = epsilon
         self._trans_qkvw = trans_qkvw
         self._remove_padding = remove_padding
+        self._use_geglu = use_geglu
         self._ring_id = ring_id
 
         self.embed_dim = embed_dim
@@ -1448,6 +1450,7 @@ class FusedMultiTransformer(Layer):
             time_step=time_step,
             seq_lens=seq_lens,
             remove_padding=self._remove_padding,
+            use_geglu=self._use_geglu,
             attn_mask=attn_mask,
             dropout_rate=self.dropout_rate,
             rotary_emb_dims=rotary_emb_dims,

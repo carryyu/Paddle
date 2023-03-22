@@ -883,6 +883,7 @@ def fused_multi_transformer(
     cache_kvs=None,
     pre_caches=None,
     remove_padding=False,
+    use_geglu=False,
     seq_lens=None,
     rotary_embs=None,
     time_step=None,
@@ -1069,6 +1070,8 @@ def fused_multi_transformer(
             pre_layer_norm,
             'remove_padding',
             remove_padding,
+            'use_geglu',
+            use_geglu,
             'epsilon',
             epsilon,
             'dropout_rate',
@@ -1145,6 +1148,7 @@ def fused_multi_transformer(
             'trans_qkvw': trans_qkvw,
             'ring_id': ring_id,
             'remove_padding': remove_padding,
+            'use_geglu': use_geglu,
         }
 
         outputs = dict()
