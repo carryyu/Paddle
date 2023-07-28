@@ -44,8 +44,8 @@ void MMHAKernel(const Context& dev_ctx,
 #ifndef PADDLE_WITH_HIP
   const auto& x_dims = x.dims();
   int bsz = x_dims[0];
-  int num_head = x_dims[2];
-  int dim_head = x_dims[3];
+  int num_head = x_dims[3];
+  int dim_head = x_dims[4];
   int timestep = src_mask->dims()[3] - 1;
   int cache_bsz = cache_kv.dims()[1];
   int max_seq_len = cache_kv.dims()[3];

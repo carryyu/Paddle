@@ -3903,25 +3903,25 @@ void MaskedMultiheadAttentionInferMeta(const MetaTensor& x,
   auto x_dims = x.dims();
   auto x_dtype = x.dtype();
   int bsz = x_dims[0];
-  int num_head = x_dims[2];
-  int dim_head = x_dims[3];
+  int num_head = x_dims[3];
+  int dim_head = x_dims[4];
 
   auto cache_kv_dims = cache_kv.dims();
 
   PADDLE_ENFORCE_EQ(
       x_dims.size(),
-      4,
-      errors::InvalidArgument("The dimensions of x must be 4"
-                              "(batch_size, 3, num_head, dim_head),"
+      5,
+      errors::InvalidArgument("The dimensions of x must be 5"
+                              "(batch_size, seqlen, 3, num_head, dim_head),"
                               "but received dimensions of"
                               "Input is [%d]",
                               x_dims.size()));
 
   PADDLE_ENFORCE_EQ(
-      x_dims[1],
+      x_dims[2],
       3,
       errors::InvalidArgument("The second dim of input x must be 3, but got %d",
-                              x_dims[1]));
+                              x_dims[2]));
 
   PADDLE_ENFORCE_EQ(
       cache_kv_dims.size(),
@@ -3945,9 +3945,9 @@ void MaskedMultiheadAttentionInferMeta(const MetaTensor& x,
   }
 
   if (sequence_lengths) {
-    out->set_dims({bsz, num_head, dim_head});
+    out->set_dims({bsz, num_head * dim_head});
   } else {
-    out->set_dims({bsz, 1, num_head, dim_head});
+    out->set_dims({bsz, num_head * dim_head});
   }
   if (out_linear_in_scale > 0) {
     out->set_dtype(DataType::INT8);
