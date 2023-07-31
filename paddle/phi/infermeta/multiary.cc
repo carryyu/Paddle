@@ -3908,14 +3908,14 @@ void MaskedMultiheadAttentionInferMeta(const MetaTensor& x,
   int dim_head = cache_kv.dims()[4];
 
  
-  PADDLE_ENFORCE_EQ(
-      x_dims.size(),
-      3,
-      errors::InvalidArgument("The dimensions of x must be 3"
-                              "(batch_size, seqlen, 3 * num_head *dim_head),"
-                              "but received dimensions of"
-                              "Input is [%d]",
-                              x_dims.size()));
+  // PADDLE_ENFORCE_EQ(
+  //     x_dims.size(),
+  //     3,
+  //     errors::InvalidArgument("The dimensions of x must be 3"
+  //                             "(batch_size, seqlen, 3 * num_head *dim_head),"
+  //                             "but received dimensions of"
+  //                             "Input is [%d]",
+  //                             x_dims.size()));
 
   // PADDLE_ENFORCE_EQ(
   //     x_dims[2],
