@@ -81,17 +81,19 @@ void MultiHeadAttentionVariableForwardKernel(
     if (mask && !KernelType::kAddMask) {
       return;
     }
+    if (!mask && KernelType::kAddMask) {
+      return;
+    }
     if (KernelType::kMaskBroadcastRow) {
       // not support mask_broad_cast
       return;
     }
-    if (reinterpret_cast<uintptr_t>(params.mask_ptr) % 16 == 0 &&
+    if (mask && reinterpret_cast<uintptr_t>(params.mask_ptr) % 16 == 0 &&
         params.ldm % (16 / sizeof(T)) == 0 && !KernelType::kMaskIsAligned) {
       return;
     }
-    if (!(reinterpret_cast<uintptr_t>(params.mask_ptr) % 16 == 0 &&
-          params.ldm % (16 / sizeof(T)) == 0) &&
-        KernelType::kMaskIsAligned) {
+    if (mask && !(reinterpret_cast<uintptr_t>(params.mask_ptr) % 16 == 0 &&
+        params.ldm % (16 / sizeof(T)) == 0) && KernelType::kMaskIsAligned) {
       return;
     }
     if (KernelType::kSingleValueIteration &&

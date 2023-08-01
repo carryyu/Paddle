@@ -23,6 +23,7 @@ template <typename T, typename Context>
 void MMHAKernel(const Context& dev_ctx,
                 const DenseTensor& x,
                 const DenseTensor& cache_kv,
+                const DenseTensor& fmha_out,
                 const paddle::optional<DenseTensor>& src_mask,
                 const paddle::optional<DenseTensor>& cum_offsets,
                 const paddle::optional<DenseTensor>& sequence_lengths,
@@ -44,13 +45,14 @@ void MMHAKernel(const Context& dev_ctx,
 #ifndef PADDLE_WITH_HIP
   const auto& x_dims = x.dims();
   int bsz = x_dims[0];
-  int num_head = x_dims[2];
-  int dim_head = x_dims[3];
-  int timestep = src_mask->dims()[3] - 1;
+  int num_head = cache_kv.dims()[2];
+  int dim_head = cache_kv.dims()[4];
   int cache_bsz = cache_kv.dims()[1];
   int max_seq_len = cache_kv.dims()[3];
+  int timestep = max_seq_len;
   float inv_sqrt_dh = 1. / sqrt(dim_head);
 
+  Masked_multihead_attention_params<T> params;
   bool mask_broadcast_num_heads = true;
   if (src_mask) {
     if (src_mask->dims()[1] == 1) {
@@ -65,20 +67,22 @@ void MMHAKernel(const Context& dev_ctx,
           num_head,
           src_mask->dims()[1]));
     }
+    params.attn_mask = src_mask->data<T>();
+    params.mask_length = src_mask->dims()[3];
+    timestep = src_mask->dims()[3] - 1;
   }
 
-  if (out_linear_in_scale > 0) {
-    dev_ctx.template Alloc<int8_t>(out);
-  } else {
-    dev_ctx.template Alloc<T>(out);
-  }
+  // if (!fmha_out) {
+  //   if (out_linear_in_scale > 0) {
+  //     dev_ctx.template Alloc<int8_t>(out);
+  //   } else {
+  //     dev_ctx.template Alloc<T>(out);
+  //   }
+  // }
 
-  Masked_multihead_attention_params<T> params;
-  params.attn_mask = src_mask->data<T>();
   params.mask_broadcast_num_heads = mask_broadcast_num_heads;
   params.cache_kv = const_cast<T*>(cache_kv_out->data<T>());
   params.neox_rotary_style = use_neox_rotary_style;
-  params.mask_length = src_mask->dims()[3];
 
   if (sequence_lengths) {
     params.sequence_lengths = sequence_lengths->data<int>();
@@ -119,7 +123,7 @@ void MMHAKernel(const Context& dev_ctx,
                     params,
                     num_head,
                     dim_head,
-                    out,
+                    &const_cast<DenseTensor&>(fmha_out),
                     qkv_out_scale.get_ptr(),
                     out_linear_in_scale,
                     quant_round_type,
@@ -131,7 +135,7 @@ void MMHAKernel(const Context& dev_ctx,
                     params,
                     num_head,
                     dim_head,
-                    out,
+                    &const_cast<DenseTensor&>(fmha_out),
                     qkv_out_scale.get_ptr(),
                     out_linear_in_scale,
                     quant_round_type,
@@ -144,7 +148,6 @@ void MMHAKernel(const Context& dev_ctx,
 }  // namespace fusion
 }  // namespace phi
 
-#if CUDA_VERSION >= 11000
 PD_REGISTER_KERNEL(masked_multihead_attention,
                    GPU,
                    ALL_LAYOUT,
@@ -152,11 +155,3 @@ PD_REGISTER_KERNEL(masked_multihead_attention,
                    float,
                    phi::dtype::float16,
                    phi::dtype::bfloat16) {}
-#else
-PD_REGISTER_KERNEL(masked_multihead_attention,
-                   GPU,
-                   ALL_LAYOUT,
-                   phi::fusion::MMHAKernel,
-                   float,
-                   phi::dtype::float16) {}
-#endif

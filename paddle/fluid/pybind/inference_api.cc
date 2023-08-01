@@ -255,6 +255,7 @@ paddle_infer::PlaceType ToPaddleInferPlace(
 
 void PaddleInferShareExternalData(paddle_infer::Tensor &tensor,  // NOLINT
                                   phi::DenseTensor input_tensor) {
+  printf("PaddleInferShareExternalData\n");
   std::vector<int> shape;
   for (int i = 0; i < input_tensor.dims().size(); ++i) {
     shape.push_back(input_tensor.dims()[i]);
@@ -289,6 +290,11 @@ void PaddleInferShareExternalData(paddle_infer::Tensor &tensor,  // NOLINT
         static_cast<int64_t *>(input_tensor.data()),
         shape,
         ToPaddleInferPlace(input_tensor.place().GetType()));
+  } else if (input_tensor.dtype() == phi::DataType::BOOL) {
+    tensor.ShareExternalData(
+        static_cast<bool *>(input_tensor.data<bool>()),
+        shape,
+        ToPaddleInferPlace(input_tensor.place().GetType()));
   } else {
     PADDLE_THROW(platform::errors::Unimplemented(
         "Unsupported data type. Now share_external_data only supports INT32, "
@@ -300,7 +306,7 @@ void PaddleTensorShareExternalData(paddle_infer::Tensor &tensor,  // NOLINT
                                    paddle::Tensor &&paddle_tensor) {
   std::vector<int> shape;
   for (int i = 0; i < paddle_tensor.dims().size(); ++i) {
-    shape.push_back(paddle_tensor.dims()[i]);
+    shape.push_back(static_cast<int>(paddle_tensor.dims()[i]));
   }
 
   if (paddle_tensor.dtype() == phi::DataType::FLOAT64) {
@@ -334,10 +340,15 @@ void PaddleTensorShareExternalData(paddle_infer::Tensor &tensor,  // NOLINT
         static_cast<int64_t *>(paddle_tensor.data<int64_t>()),
         shape,
         ToPaddleInferPlace(paddle_tensor.place().GetType()));
+  } else if (paddle_tensor.dtype() == phi::DataType::BOOL) {
+    tensor.ShareExternalData(
+        static_cast<bool *>(paddle_tensor.data<bool>()),
+        shape,
+        ToPaddleInferPlace(paddle_tensor.place().GetType()));
   } else {
     PADDLE_THROW(platform::errors::Unimplemented(
         "Unsupported data type. Now share_external_data only supports INT32, "
-        "INT64, FLOAT32, BFLOAT16 and FLOAT16."));
+        "INT64, FLOAT32, BFLOAT16, FLOAT16 and BOOL."));
   }
 }
 

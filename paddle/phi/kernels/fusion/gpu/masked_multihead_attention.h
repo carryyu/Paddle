@@ -26,6 +26,7 @@ template <typename T, typename Context>
 void MMHAKernel(const Context& dev_ctx,
                 const DenseTensor& x,
                 const DenseTensor& cache_kv,
+                const DenseTensor& fmha_out,
                 const paddle::optional<DenseTensor>& src_mask,
                 const paddle::optional<DenseTensor>& cum_offsets,
                 const paddle::optional<DenseTensor>& sequence_lengths,

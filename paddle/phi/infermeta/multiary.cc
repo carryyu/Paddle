@@ -3882,6 +3882,7 @@ void WeightOnlyMatmulInferMeta(const MetaTensor& x,
 
 void MaskedMultiheadAttentionInferMeta(const MetaTensor& x,
                                        const MetaTensor& cache_kv,
+                                       const MetaTensor& fmha_out,
                                        const MetaTensor& src_mask,
                                        const MetaTensor& cum_offsets,
                                        const MetaTensor& sequence_lengths,
@@ -3900,60 +3901,62 @@ void MaskedMultiheadAttentionInferMeta(const MetaTensor& x,
                                        MetaTensor* out,
                                        MetaTensor* cache_kv_out,
                                        MetaTensor* beam_cache_offset_out) {
-  auto x_dims = x.dims();
-  auto x_dtype = x.dtype();
-  int bsz = x_dims[0];
-  int num_head = x_dims[2];
-  int dim_head = x_dims[3];
+  // auto x_dims = x.dims();
+  // auto x_dtype = x.dtype();
+  // int bsz = x_dims[0];
+  // int num_head = x_dims[2];
+  // int dim_head = x_dims[3];
 
   auto cache_kv_dims = cache_kv.dims();
 
-  PADDLE_ENFORCE_EQ(
-      x_dims.size(),
-      4,
-      errors::InvalidArgument("The dimensions of x must be 4"
-                              "(batch_size, 3, num_head, dim_head),"
-                              "but received dimensions of"
-                              "Input is [%d]",
-                              x_dims.size()));
+  // PADDLE_ENFORCE_EQ(
+  //     x_dims.size(),
+  //     4,
+  //     errors::InvalidArgument("The dimensions of x must be 4"
+  //                             "(batch_size, 3, num_head, dim_head),"
+  //                             "but received dimensions of"
+  //                             "Input is [%d]",
+  //                             x_dims.size()));
 
-  PADDLE_ENFORCE_EQ(
-      x_dims[1],
-      3,
-      errors::InvalidArgument("The second dim of input x must be 3, but got %d",
-                              x_dims[1]));
+  // PADDLE_ENFORCE_EQ(
+  //     x_dims[1],
+  //     3,
+  //     errors::InvalidArgument("The second dim of input x must be 3, but got %d",
+  //                             x_dims[1]));
 
-  PADDLE_ENFORCE_EQ(
-      cache_kv_dims.size(),
-      5,
-      errors::InvalidArgument("The cache_kv must be 5 dims, but got %d",
-                              cache_kv_dims.size()));
+  // PADDLE_ENFORCE_EQ(
+  //     cache_kv_dims.size(),
+  //     5,
+  //     errors::InvalidArgument("The cache_kv must be 5 dims, but got %d",
+  //                             cache_kv_dims.size()));
 
-  PADDLE_ENFORCE_EQ(
-      cache_kv_dims[0],
-      2,
-      errors::InvalidArgument("The first dim of cache_kv must be 2, but got %d",
-                              cache_kv_dims[0]));
+  // PADDLE_ENFORCE_EQ(
+  //     cache_kv_dims[0],
+  //     2,
+  //     errors::InvalidArgument("The first dim of cache_kv must be 2, but got %d",
+  //                             cache_kv_dims[0]));
 
-  if (rotary_tensor) {
-    PADDLE_ENFORCE_EQ(
-        rotary_tensor.dtype(),
-        DataType::FLOAT32,
-        errors::InvalidArgument(
-            "The dtype of rotary_tensor must be float32, but got %d",
-            rotary_tensor.dtype()));
-  }
+  // if (rotary_tensor) {
+  //   PADDLE_ENFORCE_EQ(
+  //       rotary_tensor.dtype(),
+  //       DataType::FLOAT32,
+  //       errors::InvalidArgument(
+  //           "The dtype of rotary_tensor must be float32, but got %d",
+  //           rotary_tensor.dtype()));
+  // }
 
-  if (sequence_lengths) {
-    out->set_dims({bsz, num_head, dim_head});
-  } else {
-    out->set_dims({bsz, 1, num_head, dim_head});
-  }
-  if (out_linear_in_scale > 0) {
-    out->set_dtype(DataType::INT8);
-  } else {
-    out->set_dtype(x_dtype);
-  }
+  // if (sequence_lengths) {
+  //   out->set_dims({bsz, num_head, dim_head});
+  // } else {
+  //   out->set_dims({bsz, 1, num_head, dim_head});
+  // }
+  // if (out_linear_in_scale > 0) {
+  //   out->set_dtype(DataType::INT8);
+  // } else {
+  //   out->set_dtype(x_dtype);
+  // }
+  out->set_dims(fmha_out.dims());
+  out->set_dtype(fmha_out.dtype());
 
   cache_kv_out->set_dims(cache_kv_dims);
   cache_kv_out->set_dtype(cache_kv.dtype());

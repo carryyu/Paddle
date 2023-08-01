@@ -745,6 +745,7 @@ void FusedRopeInferMeta(const MetaTensor& q,
 
 void MaskedMultiheadAttentionInferMeta(const MetaTensor& x,
                                        const MetaTensor& cache_kv,
+                                       const MetaTensor& fmha_out,
                                        const MetaTensor& src_mask,
                                        const MetaTensor& cum_offsets,
                                        const MetaTensor& sequence_lengths,

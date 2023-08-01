@@ -134,8 +134,19 @@ class TestMemEffAttentionVariableAPI(unittest.TestCase):
             self.attention_mask,
             self.scale,
         )
+        out_casual = variable_length_memory_efficient_attention(
+            q,
+            k,
+            v,
+            self.seq_lens,
+            self.seq_lens,
+            # self.attention_mask,
+            scale=self.scale,
+            causal=True
+        )
 
         np.testing.assert_allclose(out.numpy(), out_, rtol=5e-03, atol=1e-03)
+        np.testing.assert_allclose(out_casual.numpy(), out_, rtol=5e-03, atol=1e-03)
 
 
 class TestMemEffAPIVariableDtypeFP16(TestMemEffAttentionVariableAPI):
