@@ -23,7 +23,6 @@ template <typename T, typename Context>
 void MMHAKernel(const Context& dev_ctx,
                 const DenseTensor& x,
                 const DenseTensor& cache_kv,
-                const DenseTensor& fmha_out,
                 const paddle::optional<DenseTensor>& src_mask,
                 const paddle::optional<DenseTensor>& cum_offsets,
                 const paddle::optional<DenseTensor>& sequence_lengths,
@@ -72,13 +71,11 @@ void MMHAKernel(const Context& dev_ctx,
     timestep = src_mask->dims()[3] - 1;
   }
 
-  // if (!fmha_out) {
-  //   if (out_linear_in_scale > 0) {
-  //     dev_ctx.template Alloc<int8_t>(out);
-  //   } else {
-  //     dev_ctx.template Alloc<T>(out);
-  //   }
-  // }
+  if (out_linear_in_scale > 0) {
+    dev_ctx.template Alloc<int8_t>(out);
+  } else {
+    dev_ctx.template Alloc<T>(out);
+  }
 
   params.mask_broadcast_num_heads = mask_broadcast_num_heads;
   params.cache_kv = const_cast<T*>(cache_kv_out->data<T>());
@@ -123,7 +120,7 @@ void MMHAKernel(const Context& dev_ctx,
                     params,
                     num_head,
                     dim_head,
-                    &const_cast<DenseTensor&>(fmha_out),
+                    out,
                     qkv_out_scale.get_ptr(),
                     out_linear_in_scale,
                     quant_round_type,
@@ -135,7 +132,7 @@ void MMHAKernel(const Context& dev_ctx,
                     params,
                     num_head,
                     dim_head,
-                    &const_cast<DenseTensor&>(fmha_out),
+                    out,
                     qkv_out_scale.get_ptr(),
                     out_linear_in_scale,
                     quant_round_type,
@@ -148,6 +145,7 @@ void MMHAKernel(const Context& dev_ctx,
 }  // namespace fusion
 }  // namespace phi
 
+#if CUDA_VERSION >= 11000
 PD_REGISTER_KERNEL(masked_multihead_attention,
                    GPU,
                    ALL_LAYOUT,
@@ -155,3 +153,11 @@ PD_REGISTER_KERNEL(masked_multihead_attention,
                    float,
                    phi::dtype::float16,
                    phi::dtype::bfloat16) {}
+#else
+PD_REGISTER_KERNEL(masked_multihead_attention,
+                   GPU,
+                   ALL_LAYOUT,
+                   phi::fusion::MMHAKernel,
+                   float,
+                   phi::dtype::float16) {}
+#endif
