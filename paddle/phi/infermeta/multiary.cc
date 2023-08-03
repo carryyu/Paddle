@@ -3903,7 +3903,7 @@ void MaskedMultiheadAttentionInferMeta(const MetaTensor& x,
   // auto x_dims = x.dims();
   auto cache_dims = cache_kv.dims();
   auto x_dtype = x.dtype();
-  int bsz = cache_dims[1];
+  int bsz = x.dims()[0];
   int num_head = cache_dims[2];
   int dim_head = cache_dims[4];
 
