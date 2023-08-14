@@ -1940,7 +1940,7 @@ def linear_compress(
         helper.append_op(
             type=type,
             inputs=inputs,
-            outputs={'Out': tmp},
+            outputs={'out': tmp},
             attrs=attrs,
         )
         if bias is not None:
