@@ -24,9 +24,10 @@ from .fused_rotary_position_embedding import fused_rotary_position_embedding
 from .variable_length_memory_efficient_attention import (
     variable_length_memory_efficient_attention,
 )
-from .rms_norm import rms_norm
 from .masked_multihead_attention import masked_multihead_attention
 
+from .fused_rms_norm import fused_rms_norm
+from .fused_layer_norm import fused_layer_norm
 
 __all__ = [
     'fused_multi_head_attention',
@@ -39,6 +40,7 @@ __all__ = [
     'fused_dropout_add',
     'fused_rotary_position_embedding',
     'variable_length_memory_efficient_attention',
-    "rms_norm",
     "masked_multihead_attention",
+    "fused_rms_norm",
+    "fused_layer_norm",
 ]

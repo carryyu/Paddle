@@ -1457,6 +1457,68 @@ void FusedBiasActInferMeta(const MetaTensor& x,
   out->set_layout(x.layout());
 }
 
+void FusedLayerNormInferMeta(const MetaTensor& x,
+                             const MetaTensor& bias,
+                             const MetaTensor& residual,
+                             const MetaTensor& norm_weight,
+                             const MetaTensor& norm_bias,
+                             const float epsilon,
+                             const float residual_alpha,
+                             const int begin_norm_axis,
+                             const float quant_scale,
+                             const int quant_round_type,
+                             const float quant_max_bound,
+                             const float quant_min_bound,
+                             MetaTensor* out,
+                             MetaTensor* residual_out,
+                             MetaTensor* mean,
+                             MetaTensor* variance) {
+  std::vector<int64_t> x_dims_vec = phi::vectorize(x.dims());
+  auto x_dims_size = x_dims_vec.size();
+
+  size_t normalized_dims = 1;
+  for (size_t i = begin_norm_axis; i < x_dims_size; ++i) {
+    normalized_dims *= x_dims_vec[i];
+  }
+
+  int32_t rows = 1;
+  for (int i = 0; i < begin_norm_axis; i++) {
+    rows *= x.dims()[i];
+  }
+
+  PADDLE_ENFORCE_EQ(normalized_dims,
+                    norm_weight.dims()[0],
+                    phi::errors::InvalidArgument(
+                        "The normalized size of Input(X) must equal to be"
+                        "the size of Weight, but received"
+                        "normalized size of Input(X) is [%d], received size"
+                        "of Weight is [%d]",
+                        normalized_dims,
+                        norm_weight.dims()[0]));
+
+  auto out_dims = phi::make_ddim(x_dims_vec);
+
+  out->set_dims(out_dims);
+  if (quant_scale <= 0.0f) {
+    out->set_dtype(x.dtype());
+  } else {
+    out->set_dtype(phi::DataType::INT8);
+  }
+  out->set_layout(x.layout());
+
+  residual_out->set_dims(out_dims);
+  residual_out->set_dtype(x.dtype());
+  residual_out->set_layout(x.layout());
+
+  mean->set_dims(phi::make_ddim({rows}));
+  mean->set_dtype(DataType::FLOAT32);
+  mean->set_layout(x.layout());
+
+  variance->set_dims(phi::make_ddim({rows}));
+  variance->set_dtype(DataType::FLOAT32);
+  variance->set_layout(x.layout());
+}
+
 void FusedLinearParamGradAddInferMeta(const MetaTensor& x,
                                       const MetaTensor& dout,
                                       const MetaTensor& dweight,
@@ -2520,15 +2582,16 @@ void MemoryEfficientAttentionInferMeta(const MetaTensor& query,
   seed_and_offset->set_dtype(phi::DataType::INT64);
 }
 
-void VariableLengthMemoryEfficientAttentionInferMeta(const MetaTensor& query,
-                                                     const MetaTensor& key,
-                                                     const MetaTensor& value,
-                                                     const MetaTensor& seq_lens,
-                                                     const MetaTensor& kv_seq_lens,
-                                                     const MetaTensor& mask,
-                                                     float scale,
-                                                     bool causal,
-                                                     MetaTensor* out) {
+void VariableLengthMemoryEfficientAttentionInferMeta(
+    const MetaTensor& query,
+    const MetaTensor& key,
+    const MetaTensor& value,
+    const MetaTensor& seq_lens,
+    const MetaTensor& kv_seq_lens,
+    const MetaTensor& mask,
+    float scale,
+    bool causal,
+    MetaTensor* out) {
   PADDLE_ENFORCE_EQ(
       query.dims().size(),
       4,
@@ -2563,12 +2626,11 @@ void VariableLengthMemoryEfficientAttentionInferMeta(const MetaTensor& query,
   const int64_t value_seq_length = value.dims()[2];
   const int64_t value_head_size = value.dims()[3];
 
-  PADDLE_ENFORCE_EQ(
-      ((query_batch_size == key_batch_size) &&
-       (key_batch_size == value_batch_size)),
-      true,
-      phi::errors::InvalidArgument(
-          "The batchsize of Query, Key, Value should be equal."));
+  PADDLE_ENFORCE_EQ(((query_batch_size == key_batch_size) &&
+                     (key_batch_size == value_batch_size)),
+                    true,
+                    phi::errors::InvalidArgument(
+                        "The batchsize of Query, Key, Value should be equal."));
 
   PADDLE_ENFORCE_EQ(
       ((query_num_head == key_num_head) && (key_num_head == value_num_head)),
@@ -2866,6 +2928,54 @@ void PsroiPoolInferMeta(const MetaTensor& x,
 
   out->set_dims(out_dims);
   out->set_dtype(x.dtype());
+}
+
+void RmsNormInferMeta(const MetaTensor& x,
+                      const MetaTensor& bias,
+                      const MetaTensor& residual,
+                      const MetaTensor& norm_weight,
+                      const MetaTensor& norm_bias,
+                      const float epsilon,
+                      const int begin_norm_axis,
+                      const float quant_scale,
+                      const int quant_round_type,
+                      const float quant_max_bound,
+                      const float quant_min_bound,
+                      MetaTensor* out,
+                      MetaTensor* residual_out) {
+  std::vector<int64_t> x_dims_vec = phi::vectorize(x.dims());
+  auto x_dims_size = x_dims_vec.size();
+
+  size_t normalized_dims = 1;
+  for (size_t i = begin_norm_axis; i < x_dims_size; ++i) {
+    normalized_dims *= x_dims_vec[i];
+  }
+
+  PADDLE_ENFORCE_EQ(normalized_dims,
+                    norm_weight.dims()[0],
+                    phi::errors::InvalidArgument(
+                        "The normalized size of Input(X) must equal to be"
+                        "the size of Weight, but received"
+                        "normalized size of Input(X) is [%d], received size"
+                        "of Weight is [%d]",
+                        normalized_dims,
+                        norm_weight.dims()[0]));
+
+  auto out_dims = phi::make_ddim(x_dims_vec);
+
+  out->set_dims(out_dims);
+  if (quant_scale <= 0.0f) {
+    out->set_dtype(x.dtype());
+  } else {
+    out->set_dtype(phi::DataType::INT8);
+  }
+  out->set_layout(x.layout());
+  out->share_lod(x);
+
+  residual_out->set_dims(out_dims);
+  residual_out->set_dtype(x.dtype());
+  residual_out->set_layout(x.layout());
+  residual_out->share_lod(x);
 }
 
 void RmspropInferMeta(const MetaTensor& param,
@@ -3746,16 +3856,16 @@ void NormHelperInferMeta(const MetaTensor& x,
 
   int64_t rows = size / normalized_dims;
 
-  if(norm_weight){
+  if (norm_weight) {
     PADDLE_ENFORCE_EQ(normalized_dims,
-                    norm_weight.dims()[0],
-                    phi::errors::InvalidArgument(
-                        "The normalized size of Input(X) must equal to be"
-                        "the size of Weight, but received"
-                        "normalized size of Input(X) is [%d], received size"
-                        "of Weight is [%d]",
-                        normalized_dims,
-                        norm_weight.dims()[0]));
+                      norm_weight.dims()[0],
+                      phi::errors::InvalidArgument(
+                          "The normalized size of Input(X) must equal to be"
+                          "the size of Weight, but received"
+                          "normalized size of Input(X) is [%d], received size"
+                          "of Weight is [%d]",
+                          normalized_dims,
+                          norm_weight.dims()[0]));
   }
 
   auto out_dims = phi::make_ddim(x_dims_vec);
@@ -3921,7 +4031,8 @@ void MaskedMultiheadAttentionInferMeta(const MetaTensor& x,
   // PADDLE_ENFORCE_EQ(
   //     x_dims[1],
   //     3,
-  //     errors::InvalidArgument("The second dim of input x must be 3, but got %d",
+  //     errors::InvalidArgument("The second dim of input x must be 3, but got
+  //     %d",
   //                             x_dims[1]));
 
   PADDLE_ENFORCE_EQ(
