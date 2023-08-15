@@ -29,13 +29,14 @@ inline T xabs(const T x) {
 }
 
 template <typename T>
-void per_channel_scale(float* scale, const T* input, size_t m, size_t n) {
+void per_channel_scale(
+    float* scale, const T* input, size_t m, size_t n, float bound) {
   for (size_t i = 0; i < n; ++i) {
     T max = input[i];
     for (size_t j = 0; j < m; ++j) {
       max = xabs(input[j * n + i]) > max ? xabs(input[j * n + i]) : max;
     }
-    scale[i] = static_cast<float>(max) / 127.0;
+    scale[i] = static_cast<float>(max) / bound;
   }
 }
 
@@ -321,7 +322,8 @@ void interleave_column_major_tensor(int8_t* interleaved_quantized_tensor,
 
   const size_t num_vec_rows = num_rows / elts_in_int32;
   const size_t vec_rows_per_tile = rows_per_tile / elts_in_int32;
-  const size_t interleave = 2;
+  const size_t interleave = 128 * 8 / quant_bit / rows_per_tile;
+
   for (size_t read_col = 0; read_col < num_cols; ++read_col) {
     const size_t write_col = read_col / interleave;
     for (size_t base_vec_row = 0; base_vec_row < num_vec_rows;

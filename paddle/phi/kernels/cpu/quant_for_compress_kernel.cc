@@ -57,7 +57,7 @@ void quant_compute(const DeviceContext& dev_ctx,
   dev_ctx.template Alloc<D>(&int_processed_2);
   D* int_processed_2_data = int_processed_2.data<D>();
 
-  per_channel_scale(scale_data, x_data, m, n);
+  per_channel_scale(scale_data, x_data, m, n, bits == 8 ? 127.0f : 7.0f);
 
   per_channel_quant<T, bits>(x_int_data, x_data, scale_data, m, n);
   if (layout == "weight_only") {
