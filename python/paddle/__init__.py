@@ -394,6 +394,7 @@ from .tensor.search import searchsorted  # noqa: F401
 from .tensor.search import bucketize  # noqa: F401
 from .tensor.search import masked_select  # noqa: F401
 from .tensor.search import topk  # noqa: F401
+from .tensor.search import top_p_sampling  # noqa: F401
 from .tensor.search import where  # noqa: F401
 from .tensor.search import where_  # noqa: F401
 from .tensor.search import index_select  # noqa: F401
@@ -660,6 +661,7 @@ __all__ = [  # noqa
     'zeros_like',
     'maximum',
     'topk',
+    'top_p_sampling',
     'index_select',
     'CPUPlace',
     'matmul',

@@ -4475,5 +4475,19 @@ void FullWithTensorInferMeta(const MetaTensor& shape,
   out->set_dtype(dtype);
 }
 
+void TopPSamplingInferMeta(const MetaTensor& x,
+                           const MetaTensor& ps,
+                           const MetaTensor& threshold,
+                           int random_seed,
+                           MetaTensor* out,
+                           MetaTensor* ids) {
+  auto x_dims = x.dims();
+
+  ids->set_dims(phi::make_ddim({x_dims[0], 1}));
+  ids->set_dtype(DataType::INT64);
+  out->set_dims(phi::make_ddim({x_dims[0], 1}));
+  out->set_dtype(x.dtype());
+}
+
 }  // namespace phi
 PD_REGISTER_INFER_META_FN(batch_norm_infer, phi::BatchNormInferInferMeta);

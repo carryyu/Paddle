@@ -130,10 +130,11 @@ __global__ __launch_bounds__(THREADS_PER_BLOCK) void block_attention_kernel(
 
   extern __shared__ char smem_[];
 
+  const int block_smem_offset = div_up(params.max_num_blocks_per_seq, 4) * 4 * sizeof(int); 
   float *qk_smem =
-      reinterpret_cast<float *>(smem_ + params.max_num_blocks_per_seq * 4);
+      reinterpret_cast<float *>(smem_ + block_smem_offset);
 
-  char *logits_smem_ = smem_ + params.max_num_blocks_per_seq * 4;
+  char *logits_smem_ = smem_ + block_smem_offset;
   // fp32 accum for logits
   float *logits_smem = reinterpret_cast<float *>(logits_smem_);
 
@@ -551,7 +552,7 @@ inline size_t smem_size_in_bytes(const Block_AttN_params<T> &params,
                                  int threads_per_block) {
   size_t qk_sz = div_up(params.timestep + 1, 4) * 16;
   size_t block_table_sz =
-      div_up(params.max_num_blocks_per_seq, 4) * sizeof(int);
+      div_up(params.max_num_blocks_per_seq, 4) * 4 * sizeof(int);
   size_t logits_table_sz = qk_sz + block_table_sz;
 
   int rows_per_red = threads_per_block / threads_per_value;

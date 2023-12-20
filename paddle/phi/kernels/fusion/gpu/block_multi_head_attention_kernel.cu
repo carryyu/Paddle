@@ -58,8 +58,8 @@ void BlockMultiheadAttentionKernel(
     DenseTensor* key_cache_out,
     DenseTensor* value_cache_out) {
   dev_ctx.template Alloc<T>(fmha_out);
-  InitValue(
-      dev_ctx, fmha_out->data<T>(), fmha_out->numel(), static_cast<T>(0.));
+  // InitValue(
+  //     dev_ctx, fmha_out->data<T>(), fmha_out->numel(), static_cast<T>(0.));
   const auto& input_dims = qkv.dims();
   const auto& key_cache_dims = key_cache.dims();
   const int token_num = input_dims[0];

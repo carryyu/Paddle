@@ -174,12 +174,12 @@ template<typename GPUContext>
     constexpr int kBlockSize = 64;
     constexpr int kWarpNum = kBlockSize / kWarpSize;
     constexpr int kVectorSize = 128 / sizeof(T) / 8;
-    int vec_total_n = total_n/kVectorSize;
-    VLOG(0)<<"vec_total_n:"<<vec_total_n<<" kVectorSize:"<<kVectorSize;
-    int kGridSize = max(vec_total_n/kBlockSize,(int)1);
-    // DenseTensor abs_max;
-    // abs_max.Resize({total_n});
-    // T* abs_max_data = dev_ctx.template Alloc<T>(&abs_max);
+    PADDLE_ENFORCE_EQ(
+      total_n % kVectorSize,
+      0,
+      phi::errors::PreconditionNotMet("Currently, weight_quant_gpu kernel only support n with multiple of %d.", kVectorSize));
+    int vec_total_n = total_n / kVectorSize;
+    int kGridSize = max((vec_total_n + kBlockSize - 1) / kBlockSize,(int)1);
     per_channel_quant_gpu<T, kVectorSize><<<kGridSize, kBlockSize>>>(
       weight_data,
       quanted_weight_data,
