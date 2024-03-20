@@ -4488,14 +4488,14 @@ void TopPSamplingInferMeta(const MetaTensor& x,
                            MetaTensor* topk_ids) {
   auto x_dims = x.dims();
   int bsz = x_dims[0];
-  auto ps_dims = ps.dims();
-  PADDLE_ENFORCE_GE(x_dims[0],
-                    ps_dims[0],
-                    phi::errors::InvalidArgument(
-                        "The x_dims[0] must be >= ps_dims[0] "
-                        "But received x_dims[0] = %d and ps_dims[0] = %d.",
-                        x_dims[0],
-                        ps_dims[0]));
+  // auto ps_dims = ps.dims();
+  // PADDLE_ENFORCE_NE(x_dims[0],
+  //                   ps_dims[0],
+  //                   phi::errors::InvalidArgument(
+  //                       "The x_dims[0] must be <= ps_dims[0] "
+  //                       "But received x_dims[0] = %d and ps_dims[0] = %d.",
+  //                       x_dims[0],
+  //                       ps_dims[0]));
   PADDLE_ENFORCE(
       mode == "truncated" || mode == "non-truncated",
       errors::InvalidArgument("mode must be 'truncated' or 'non-truncated'."));
