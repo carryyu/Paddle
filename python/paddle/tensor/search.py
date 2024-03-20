@@ -1186,36 +1186,96 @@ def kthvalue(x, k, axis=None, keepdim=False, name=None):
     indices.stop_gradient = True
     return values, indices
 
-def top_p_sampling(x, ps, threshold=None, seed=None, name=None):
+def top_p_sampling(
+    x,
+    ps,
+    threshold=None,
+    topp_seed=None,
+    seed=-1,
+    k=1,
+    mode="truncated",
+    return_top=False,
+    name=None,
+):
     """
     Get the TopP scores and ids.
 
     Args:
-        x(Tensor): A N-D Tensor with type float32, float16 and bfloat16.
-        ps(Tensor): A 1-D Tensor with type float32, float16 and bfloat16.
-        seed(int, optional): the random seed,
-        name (str, optional): For details, please refer to :ref:`api_guide_Name`. Generally, no setting is required. Default: None.
+        x(Tensor): An input 2-D Tensor with type float32, float16 and bfloat16.
+        ps(Tensor): A 1-D Tensor with type float32, float16 and bfloat16,
+            used to specify the top_p corresponding to each query.
+        threshold(Tensor, optional): A 1-D Tensor with type float32, float16 and bfloat16,
+            used to avoid sampling low score tokens.
+        topp_seed(Tensor, optional): A 1-D Tensor with type int64,
+            used to specify the random seed for each query.
+        seed(int, optional): the random seed. Default is -1,
+        k(int): the number of top_k scores/ids to be returned. Default is 1.
+        mode(str): The mode to choose sampling strategy. If the mode is `truncated`, sampling will truncate the probability at top_p_value.
+            If the mode is `non-truncated`, it will not be truncated. Default is `truncated`.
+        return_top(bool): Whether to return the top_k scores and ids. Default is False.
+        name (str, optional): For details, please refer to :ref:`api_guide_Name`.
+            Generally, no setting is required. Default: None.
 
     Returns:
         tuple(Tensor), return the values and indices. The value data type is the same as the input `x`. The indices data type is int64.
+
+    Examples:
+
+        .. code-block:: python
+
+            >>> # doctest: +REQUIRES(env:GPU)
+            >>> import paddle
+
+            >>> paddle.device.set_device('gpu')
+            >>> paddle.seed(2023)
+            >>> x = paddle.randn([2,3])
+            >>> print(x)
+            Tensor(shape=[2, 3], dtype=float32, place=Place(gpu:0), stop_gradient=True,
+             [[-0.32012719, -0.07942779,  0.26011357],
+              [ 0.79003978, -0.39958701,  1.42184138]])
+            >>> paddle.seed(2023)
+            >>> ps = paddle.randn([2])
+            >>> print(ps)
+            Tensor(shape=[2], dtype=float32, place=Place(gpu:0), stop_gradient=True,
+             [-0.32012719, -0.07942779])
+            >>> value, index = paddle.tensor.top_p_sampling(x, ps)
+            >>> print(value)
+            Tensor(shape=[2, 1], dtype=float32, place=Place(gpu:0), stop_gradient=True,
+             [[0.26011357],
+              [1.42184138]])
+            >>> print(index)
+            Tensor(shape=[2, 1], dtype=int64, place=Place(gpu:0), stop_gradient=True,
+             [[2],
+              [2]])
     """
 
-    if seed is None:
-        seed = -1
-
     if in_dynamic_mode():
-        return _C_ops.top_p_sampling(x, ps, threshold, seed)
+        res = _C_ops.top_p_sampling(x, ps, threshold, topp_seed, seed, k, mode)
+        if return_top:
+            return res
+        else:
+            return res[0], res[1]
 
-    inputs = {"x": x, "ps": ps, "threshold": threshold}
-    attrs = {"seed": seed}
+    inputs = {"x": x, "ps": ps, "threshold": threshold, "topp_seed": topp_seed}
+    attrs = {"random_seed": seed, "k": k, "mode": mode}
 
     helper = LayerHelper('top_p_sampling', **locals())
     out = helper.create_variable_for_type_inference(dtype=x.dtype)
     ids = helper.create_variable_for_type_inference(dtype="int64")
+    topk_scores = helper.create_variable_for_type_inference(dtype=x.dtype)
+    topk_ids = helper.create_variable_for_type_inference(dtype="int64")
     helper.append_op(
         type='top_p_sampling',
         inputs=inputs,
-        outputs={'out': out, 'ids': ids},
+        outputs={
+            'out': out,
+            'ids': ids,
+            "topk_scores": topk_scores,
+            "topk_ids": topk_ids,
+        },
         attrs=attrs,
     )
-    return out, ids
+    if return_top:
+        return out, ids, topk_scores, topk_ids
+    else:
+        return out, ids

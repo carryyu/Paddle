@@ -1,4 +1,4 @@
-// Copyright (c) 2023 PaddlePaddle Authors. All Rights Reserved.
+// Copyright (c) 2022 PaddlePaddle Authors. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,8 +23,13 @@ void TopPSamplingKernel(const Context& dev_ctx,
                         const DenseTensor& x,
                         const DenseTensor& ps,
                         const paddle::optional<DenseTensor>& threshold,
+                        const paddle::optional<DenseTensor>& topp_seed,
                         int random_seed,
+                        int k,
+                        const std::string& mode,
                         DenseTensor* out,
-                        DenseTensor* ids);
+                        DenseTensor* ids,
+                        DenseTensor* topk_scores,
+                        DenseTensor* topk_ids);
 
 }  // namespace phi
