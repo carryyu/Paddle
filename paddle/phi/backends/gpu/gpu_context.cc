@@ -57,6 +57,9 @@ limitations under the License. */
 
 #include "paddle/phi/core/enforce.h"
 
+#include "paddle/phi/core/flags.h"
+PD_DECLARE_bool(force_cublaslt_no_reduced_precision_reduction);
+
 namespace phi {
 
 namespace internal {
@@ -381,8 +384,13 @@ struct GPUContext::Impl {
         } else {
           blas_tensor_core_handle_ = blas_tensor_core_handle_creator_();
         }
-        PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
-            blas_tensor_core_handle_, CUBLAS_TENSOR_OP_MATH));
+        if(FLAGS_force_cublaslt_no_reduced_precision_reduction){
+          PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
+              blas_tensor_core_handle_, CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION));
+        } else {
+          PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
+              blas_tensor_core_handle_, CUBLAS_TENSOR_OP_MATH));
+        }
       }
 #endif
 #if CUDA_VERSION >= 11000
@@ -393,8 +401,13 @@ struct GPUContext::Impl {
           blas_tf32_tensor_core_handle_ =
               blas_tf32_tensor_core_handle_creator_();
         }
-        PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
-            blas_tf32_tensor_core_handle_, CUBLAS_TF32_TENSOR_OP_MATH));
+        if(FLAGS_force_cublaslt_no_reduced_precision_reduction){
+          PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
+              blas_tf32_tensor_core_handle_, CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION));
+        } else {
+          PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
+              blas_tf32_tensor_core_handle_, CUBLAS_TF32_TENSOR_OP_MATH));
+        }
       }
 #endif
 #endif
@@ -583,8 +596,13 @@ struct GPUContext::Impl {
         } else {
           blas_tensor_core_handle_ = blas_tensor_core_handle_creator_();
         }
-        PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
-            blas_tensor_core_handle_, CUBLAS_TENSOR_OP_MATH));
+        if(FLAGS_force_cublaslt_no_reduced_precision_reduction){
+          PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
+              blas_tensor_core_handle_, CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION));
+        } else {
+          PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
+              blas_tensor_core_handle_, CUBLAS_TENSOR_OP_MATH));
+        }
       }
 #endif
 #if CUDA_VERSION >= 11000
@@ -595,8 +613,13 @@ struct GPUContext::Impl {
           blas_tf32_tensor_core_handle_ =
               blas_tf32_tensor_core_handle_creator_();
         }
-        PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
-            blas_tf32_tensor_core_handle_, CUBLAS_TF32_TENSOR_OP_MATH));
+        if(FLAGS_force_cublaslt_no_reduced_precision_reduction){
+          PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
+              blas_tf32_tensor_core_handle_, CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION));
+        } else {
+          PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
+              blas_tf32_tensor_core_handle_, CUBLAS_TF32_TENSOR_OP_MATH));
+        }
       }
 #endif
 #endif
@@ -628,8 +651,13 @@ struct GPUContext::Impl {
         } else {
           blas_tensor_core_handle_ = blas_tensor_core_handle_creator_();
         }
-        PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
-            blas_tensor_core_handle_, CUBLAS_TENSOR_OP_MATH));
+        if(FLAGS_force_cublaslt_no_reduced_precision_reduction){
+          PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
+              blas_tensor_core_handle_, CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION));
+        } else {
+          PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
+              blas_tensor_core_handle_, CUBLAS_TENSOR_OP_MATH));
+        }
       }
 #endif
 #if CUDA_VERSION >= 11000
@@ -640,8 +668,13 @@ struct GPUContext::Impl {
           blas_tf32_tensor_core_handle_ =
               blas_tf32_tensor_core_handle_creator_();
         }
-        PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
-            blas_tf32_tensor_core_handle_, CUBLAS_TF32_TENSOR_OP_MATH));
+        if(FLAGS_force_cublaslt_no_reduced_precision_reduction){
+          PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
+              blas_tf32_tensor_core_handle_, CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION));
+        } else {
+          PADDLE_RETRY_CUDA_SUCCESS(phi::dynload::cublasSetMathMode(
+              blas_tf32_tensor_core_handle_, CUBLAS_TF32_TENSOR_OP_MATH));
+        }
       }
 #endif
 #endif

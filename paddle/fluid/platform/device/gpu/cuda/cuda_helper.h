@@ -23,6 +23,9 @@
 #include "paddle/fluid/platform/enforce.h"
 #include "paddle/fluid/platform/macros.h"
 
+#include "paddle/phi/core/flags.h"
+PD_DECLARE_bool(force_cublaslt_no_reduced_precision_reduction);
+
 namespace paddle {
 namespace platform {
 
@@ -84,12 +87,22 @@ class CublasHandleHolder {
     PADDLE_RETRY_CUDA_SUCCESS(dynload::cublasSetStream(handle_, stream));
 #if CUDA_VERSION >= 9000
     if (math_type == CUBLAS_TENSOR_OP_MATH) {
-      PADDLE_RETRY_CUDA_SUCCESS(
-          dynload::cublasSetMathMode(handle_, CUBLAS_TENSOR_OP_MATH));
+      if(FLAGS_force_cublaslt_no_reduced_precision_reduction){
+        PADDLE_RETRY_CUDA_SUCCESS(
+            dynload::cublasSetMathMode(handle_, CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION));
+      } else {
+        PADDLE_RETRY_CUDA_SUCCESS(
+            dynload::cublasSetMathMode(handle_, CUBLAS_TENSOR_OP_MATH));
+      }
 #if CUDA_VERSION >= 11000
     } else if (math_type == CUBLAS_TF32_TENSOR_OP_MATH) {
-      PADDLE_RETRY_CUDA_SUCCESS(
-          dynload::cublasSetMathMode(handle_, CUBLAS_TF32_TENSOR_OP_MATH));
+      if(FLAGS_force_cublaslt_no_reduced_precision_reduction){
+        PADDLE_RETRY_CUDA_SUCCESS(
+            dynload::cublasSetMathMode(handle_, CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION));
+      } else {
+        PADDLE_RETRY_CUDA_SUCCESS(
+            dynload::cublasSetMathMode(handle_, CUBLAS_TF32_TENSOR_OP_MATH));
+      }
 #endif  // CUDA_VERSION >= 11000
     }
 #endif  // CUDA_VERSION >= 9000

@@ -1335,6 +1335,11 @@ PHI_DEFINE_EXPORTED_int32(
     "Multiple of the CUPTI device buffer size. If the timestamps have "
     "been dropped when you are profiling, try increasing this value.");
 
+PHI_DEFINE_EXPORTED_bool(
+    force_cublaslt_no_reduced_precision_reduction, 
+    false, 
+    "force the cublaslt not to use reduced precision in reduction");
+
 #if defined(PADDLE_WITH_NCCL) || defined(PADDLE_WITH_RCCL)
 /**
  * Communication library related FLAG
