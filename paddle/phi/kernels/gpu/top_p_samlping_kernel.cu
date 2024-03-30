@@ -710,6 +710,14 @@ __global__ void topp_sampling(T* sorted_probs,
     }
   }
   __syncthreads();
+  if (stop_shared == 0) {
+    if (tid == 0) {
+      out_id[bid] = sorted_id[offset];
+      out_val[bid] = sorted_probs[offset];
+    }
+    return;
+  }
+  
   Pair<T> max_pair = BlockReduce(temp_storage_reduce).Reduce(max_thread_pair, MaxOp<Pair<T>>());
   if (tid == 0) {
     if (max_pair.id == -1) {
