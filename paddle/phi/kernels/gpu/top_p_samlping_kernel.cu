@@ -718,8 +718,8 @@ __global__ void topp_sampling(T* sorted_probs,
 #ifdef DEBUG_TOPP
     printf("max_id: %d, max_val: %f\n", (int)max_pair.id, (float)max_pair.v);
 #endif
-    out_id[bid] = sorted_id[max_pair.id];
-    out_val[bid] = sorted_probs[max_pair.id];
+    out_id[bid] = sorted_id[offset + max_pair.id];
+    out_val[bid] = sorted_probs[offset + max_pair.id];
   }
 }
 
